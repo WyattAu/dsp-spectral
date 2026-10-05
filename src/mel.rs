@@ -111,9 +111,7 @@ impl MelBank {
         fft_size: usize,
     ) -> Result<Self, SpectralError> {
         if n_mels == 0 {
-            return Err(SpectralError::Config(String::from(
-                "n_mels must be > 0",
-            )));
+            return Err(SpectralError::Config(String::from("n_mels must be > 0")));
         }
         if fft_size < 2 || !fft_size.is_power_of_two() {
             return Err(SpectralError::Config(format!(
@@ -178,12 +176,7 @@ impl MelBank {
         // costs nothing (no bin lives out there) and makes filter 0 peak at
         // exactly bin 0, so the bank tiles [0, Nyquist] and `energies` sums
         // to the frame's total power.
-        let first_gap = centres
-            .get(1)
-            .copied()
-            .unwrap_or(f_max)
-            .max(first)
-            - first;
+        let first_gap = centres.get(1).copied().unwrap_or(f_max).max(first) - first;
         let last_gap = last
             - centres
                 .get(n_mels.saturating_sub(2))
@@ -365,7 +358,11 @@ pub fn mfcc_with_lifter(mel_energies: &[f64], n_coeffs: usize, lifter: usize) ->
     let logs: Vec<f64> = mel_energies
         .iter()
         .map(|&e| {
-            let floored = if e > MEL_ENERGY_FLOOR { e } else { MEL_ENERGY_FLOOR };
+            let floored = if e > MEL_ENERGY_FLOOR {
+                e
+            } else {
+                MEL_ENERGY_FLOOR
+            };
             libm::log(floored)
         })
         .collect();
@@ -380,11 +377,16 @@ pub fn mfcc_with_lifter(mel_energies: &[f64], n_coeffs: usize, lifter: usize) ->
                     l * libm::cos(theta)
                 })
                 .sum();
-            let scale = if m == 0 { norm } else { norm * core::f64::consts::SQRT_2 };
+            let scale = if m == 0 {
+                norm
+            } else {
+                norm * core::f64::consts::SQRT_2
+            };
             let mut c = scale * sum;
             if lifter > 0 {
                 let q = core::cmp::min(m, lifter);
-                let weight = 1.0 + 0.5 * (lifter as f64) * libm::sin(PI * (q as f64) / (lifter as f64));
+                let weight =
+                    1.0 + 0.5 * (lifter as f64) * libm::sin(PI * (q as f64) / (lifter as f64));
                 c *= weight;
             }
             c
@@ -490,8 +492,8 @@ pub fn real_cepstrum(samples: &[f64]) -> Result<Vec<f64>, SpectralError> {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
     use super::{
-        MEL_ENERGY_FLOOR, MelBank, hz_to_mel, mel_frequencies, mel_to_hz, mfcc,
-        mfcc_with_lifter, real_cepstrum,
+        hz_to_mel, mel_frequencies, mel_to_hz, mfcc, mfcc_with_lifter, real_cepstrum, MelBank,
+        MEL_ENERGY_FLOOR,
     };
     use crate::complex::Complex;
     use crate::error::SpectralError;
@@ -582,14 +584,15 @@ mod tests {
         assert_eq!(e.len(), 4);
         // The bank tiles [0, Nyquist], so the energies sum to the frame's
         // total power exactly.
-        assert!((e.iter().sum::<f64>() - 5.0).abs() < 1e-9, "energy not conserved: {e:?}");
+        assert!(
+            (e.iter().sum::<f64>() - 5.0).abs() < 1e-9,
+            "energy not conserved: {e:?}"
+        );
         // Each filter's own contribution is that bin's power times its
         // weight at that bin.
         let weight = |m: usize, k: usize| bank.filter(m).expect("filter")[k];
         for m in 0..4 {
-            let want: f64 = (0..5)
-                .map(|k| weight(m, k) * frame[k].power())
-                .sum();
+            let want: f64 = (0..5).map(|k| weight(m, k) * frame[k].power()).sum();
             assert!((e[m] - want).abs() < 1e-12, "mel {m}: {e:?}");
         }
         // Every row is a sampled triangle: non-negative, ≤ 1, and — the
@@ -674,7 +677,9 @@ mod tests {
                 .iter()
                 .enumerate()
                 .map(|(i, &l)| {
-                    l * libm::cos(core::f64::consts::PI * ((m * (2 * i + 1)) as f64) / ((2 * k) as f64))
+                    l * libm::cos(
+                        core::f64::consts::PI * ((m * (2 * i + 1)) as f64) / ((2 * k) as f64),
+                    )
                 })
                 .sum();
             let scale = if m == 0 {
@@ -711,10 +716,12 @@ mod tests {
             let c_amp = 4.0f64;
             let row: Vec<f64> = (0..k)
                 .map(|i| {
-                    c_amp * libm::cos(core::f64::consts::PI * ((m * (2 * i + 1)) as f64)
-                        / ((2 * k) as f64))
+                    c_amp
+                        * libm::cos(
+                            core::f64::consts::PI * ((m * (2 * i + 1)) as f64) / ((2 * k) as f64),
+                        )
                 })
-                .map(|l| libm::exp(l))
+                .map(libm::exp)
                 .collect();
             let c = mfcc(&row, k);
             assert_eq!(c.len(), k);
@@ -762,7 +769,11 @@ mod tests {
         // check is that the global maximum lands on a multiple of the period
         // — and that multiples dominate everything in between.
         let peak = (1..n)
-            .max_by(|a, b| c[*a].partial_cmp(&c[*b]).unwrap_or(core::cmp::Ordering::Equal))
+            .max_by(|a, b| {
+                c[*a]
+                    .partial_cmp(&c[*b])
+                    .unwrap_or(core::cmp::Ordering::Equal)
+            })
             .expect("non-empty");
         assert_eq!(peak % period, 0, "peak {peak} is not a pitch multiple");
         for q in [1usize, 2, 3, 4] {
@@ -795,10 +806,7 @@ mod tests {
 
     #[test]
     fn real_cepstrum_validation() {
-        assert!(matches!(
-            real_cepstrum(&[]),
-            Err(SpectralError::EmptyInput)
-        ));
+        assert!(matches!(real_cepstrum(&[]), Err(SpectralError::EmptyInput)));
         assert!(matches!(
             real_cepstrum(&[f64::NAN; 8]),
             Err(SpectralError::NonFinite)

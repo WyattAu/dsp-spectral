@@ -1,12 +1,17 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, missing_docs)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    missing_docs
+)]
 //! Restoration primitives: noise profiling, gating, subtraction, HPSS,
 //! smoothing, and the end-to-end `denoise` SNR claim.
 
 use core::f64::consts::TAU;
 
 use dsp_spectral::{
-    Complex, GateConfig, NoiseProfile, Spectrum, StftConfig, Window, denoise,
-    harmonic_percussive_split, snr_db, spectral_gate, spectral_smooth, spectral_subtract, stft,
+    denoise, harmonic_percussive_split, snr_db, spectral_gate, spectral_smooth, spectral_subtract,
+    stft, Complex, GateConfig, NoiseProfile, Spectrum, StftConfig, Window,
 };
 
 fn lcg(seed: u64) -> impl FnMut() -> f64 {
@@ -58,8 +63,16 @@ fn noise_profile_differs_between_noise_and_a_tone() {
     assert!(tone_active < 20, "{tone_active} active bins for a tone");
 
     // And the peak magnitudes differ by orders of magnitude.
-    assert!(p_tone.peak() > 20.0 * p_noise.peak(), "{} vs {}", p_tone.peak(), p_noise.peak());
-    assert!(!p_noise.spectrum().iter().all(|a| a == &p_tone.spectrum()[0]));
+    assert!(
+        p_tone.peak() > 20.0 * p_noise.peak(),
+        "{} vs {}",
+        p_tone.peak(),
+        p_noise.peak()
+    );
+    assert!(!p_noise
+        .spectrum()
+        .iter()
+        .all(|a| a == &p_tone.spectrum()[0]));
 }
 
 #[test]
@@ -301,11 +314,22 @@ fn gate_smoothing_averages_the_gain_along_time() {
     )
     .expect("valid");
     let expected = (4.0 + dsp_core::math::db_to_linear(-12.0)) / 5.0;
-    assert!((smooth.magnitude(0)[0] - expected).abs() < 1e-12, "{}", smooth.magnitude(0)[0]);
+    assert!(
+        (smooth.magnitude(0)[0] - expected).abs() < 1e-12,
+        "{}",
+        smooth.magnitude(0)[0]
+    );
     assert!((smooth.magnitude(2)[0] - expected).abs() < 1e-12);
-    assert!(smooth.magnitude(1)[0] < 1e-12, "a silent frame stays silent");
+    assert!(
+        smooth.magnitude(1)[0] < 1e-12,
+        "a silent frame stays silent"
+    );
     // Frame 4's window never reaches frame 1.
-    assert!((smooth.magnitude(4)[0] - 1.0).abs() < 1e-12, "{}", smooth.magnitude(4)[0]);
+    assert!(
+        (smooth.magnitude(4)[0] - 1.0).abs() < 1e-12,
+        "{}",
+        smooth.magnitude(4)[0]
+    );
 }
 
 #[test]
@@ -324,7 +348,10 @@ fn spectral_subtraction_with_zero_is_the_identity() {
                 let a = spec.magnitude(f);
                 let b = same.magnitude(f);
                 for k in 0..spec.bin_count() {
-                    assert!((a[k] - b[k]).abs() < 1e-9 * a[k].max(1.0), "frame {f} bin {k}");
+                    assert!(
+                        (a[k] - b[k]).abs() < 1e-9 * a[k].max(1.0),
+                        "frame {f} bin {k}"
+                    );
                 }
             }
         }
@@ -402,7 +429,11 @@ fn spectral_smooth_is_a_no_op_with_an_identity_kernel() {
     let spec = stft(&x, &cfg).expect("valid");
     // The kernel is applied as-is with offsets `j − width/2`, so the identity
     // is a centre tap: `[1]`, or `[0, 1, 0]` at width 3.
-    for kernel in [vec![1.0], vec![0.0, 1.0, 0.0], vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]] {
+    for kernel in [
+        vec![1.0],
+        vec![0.0, 1.0, 0.0],
+        vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+    ] {
         let out = spectral_smooth(&spec, &kernel).expect("valid");
         for f in 0..spec.num_frames() {
             let a = spec.frame(f).expect("in range");
@@ -498,7 +529,10 @@ fn hpss_separates_a_harmonic_and_a_percussive_mixture() {
         band(&perc, click_frame) > 100.0 * band(&perc, steady_frame),
         "click high band"
     );
-    assert!(band(&harm, click_frame) < 0.01 * band(&perc, click_frame), "click is not harmonic");
+    assert!(
+        band(&harm, click_frame) < 0.01 * band(&perc, click_frame),
+        "click is not harmonic"
+    );
 
     // The mask is complementary, so magnitude splits exactly.
     for f in 0..spec.num_frames() {
@@ -572,7 +606,9 @@ fn denoise_improves_snr_with_a_real_margin() {
 
     // ...and a signal at the same noise level.
     let clean: Vec<f64> = (0..n)
-        .map(|i| 0.5 * (TAU * 500.0 * i as f64 / FS).sin() + 0.1 * (TAU * 1_500.0 * i as f64 / FS).sin())
+        .map(|i| {
+            0.5 * (TAU * 500.0 * i as f64 / FS).sin() + 0.1 * (TAU * 1_500.0 * i as f64 / FS).sin()
+        })
         .collect();
     let noisy: Vec<f64> = clean
         .iter()
@@ -607,11 +643,9 @@ fn denoise_end_to_end_over_a_parametric_sweep() {
     // not just at one lucky point.
     let n = 16_384usize;
     let mut gains = Vec::new();
-    for (threshold, reduction, smoothing) in [
-        (3.0f64, -12.0f64, 0usize),
-        (6.0, -18.0, 3),
-        (9.0, -24.0, 5),
-    ] {
+    for (threshold, reduction, smoothing) in
+        [(3.0f64, -12.0f64, 0usize), (6.0, -18.0, 3), (9.0, -24.0, 5)]
+    {
         let cfg = StftConfig::new(1024, 256).with_sample_rate(FS);
         let mut rng = lcg(0xF00D + threshold as u64);
         let room: Vec<f64> = (0..n / 2).map(|_| 0.02 * rng()).collect();

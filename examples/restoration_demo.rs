@@ -1,3 +1,17 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    missing_docs
+)]
+// The demo is a linear script over a signal it just synthesised: every
+// `expect` guards a call whose inputs this file controls (a valid config, a
+// non-empty buffer), and an index is a literal or a checked range. The
+// crate-level denies are lifted here only, and only because a demo that
+// aborts with a message beats one that threads Results through 200 lines of
+// printing. The library itself holds the denies.
+
 //! End-to-end demonstration of the `dsp-spectral` restoration chain.
 //!
 //! Synthesises a test signal — a musical tone, broadband room noise, and a
@@ -14,9 +28,9 @@
 use core::f64::consts::TAU;
 
 use dsp_spectral::{
-    GateConfig, NoiseProfile, StftConfig, Window, denoise, harmonic_percussive_split,
-    mel_frequencies, mfcc, snr_db, spectral_bandwidth, spectral_centroid, spectral_flatness,
-    spectral_flux, spectral_rolloff, spectral_subtract, stft, zero_crossing_rate,
+    denoise, harmonic_percussive_split, mel_frequencies, mfcc, snr_db, spectral_bandwidth,
+    spectral_centroid, spectral_flatness, spectral_flux, spectral_rolloff, spectral_subtract, stft,
+    zero_crossing_rate, GateConfig, NoiseProfile, StftConfig, Window,
 };
 
 const FS: f64 = 16_000.0;
@@ -51,14 +65,24 @@ fn main() {
         }
     }
 
+    // Zero-mean uniform noise at ±0.02, so the profile is genuinely broadband
+    // (a DC-offset "noise" would profile as a single spike at bin 0 and tell
+    // the gate nothing useful).
     let mut noisy = clean.clone();
     for v in noisy.iter_mut() {
-        *v += 0.02 * rng.next_f64() * 2.0;
+        *v += 0.02 * (rng.next_f64() * 2.0 - 1.0);
     }
 
     println!("dsp-spectral restoration demo");
-    println!("  signal      {} samples @ {FS:.0} Hz ({} ms)", noisy.len(), noisy.len() * 1000 / FS as usize);
-    println!("  stft        {FFT}-point {} window, hop {HOP} (75 % overlap)", Window::Hann.name());
+    println!(
+        "  signal      {} samples @ {FS:.0} Hz ({} ms)",
+        noisy.len(),
+        noisy.len() * 1000 / FS as usize
+    );
+    println!(
+        "  stft        {FFT}-point {} window, hop {HOP} (75 % overlap)",
+        Window::Hann.name()
+    );
     println!("  noise floor 0.02 (uniform), tone amplitude 0.25, clicks 0.8");
     println!();
 
@@ -83,11 +107,16 @@ fn main() {
         noise_segment.len() * 1000 / FS as usize
     );
     println!("  peak noise magnitude: {:.4}", profile.peak());
-    println!("  noise ZCR: {:.4} per sample", zero_crossing_rate(noise_segment));
+    println!(
+        "  noise ZCR: {:.4} per sample",
+        zero_crossing_rate(noise_segment)
+    );
     // The profile's shape is worth printing: a flat floor looks different from
     // a tonal one at a glance.
     let p = profile.spectrum();
-    let bar = |v: f64, width: usize| "#".repeat((v / profile.peak() * width as f64).clamp(0.0, width as f64) as usize);
+    let bar = |v: f64, width: usize| {
+        "#".repeat((v / profile.peak() * width as f64).clamp(0.0, width as f64) as usize)
+    };
     for (label, bin) in [
         ("      0 Hz", 0usize),
         ("    500 Hz", 32),
@@ -159,9 +188,8 @@ fn main() {
     let (harm, perc) = harmonic_percussive_split(&gated_spec, 8.0);
     let harm_sig = dsp_spectral::istft(&harm, gated.len());
     let perc_sig = dsp_spectral::istft(&perc, gated.len());
-    let mean_energy = |s: &[f64]| -> f64 {
-        s.iter().map(|v| v * v).sum::<f64>() / (s.len() as f64)
-    };
+    let mean_energy =
+        |s: &[f64]| -> f64 { s.iter().map(|v| v * v).sum::<f64>() / (s.len() as f64) };
     println!(
         "  harmonic  RMS {:.5}  (the sustained tone lives here)",
         mean_energy(&harm_sig).sqrt()
@@ -170,24 +198,29 @@ fn main() {
         "  percussive RMS {:.5}  (the clicks live here)",
         mean_energy(&perc_sig).sqrt()
     );
-    // The clicks are where the two parts differ most: measure the per-frame
-    // percussive energy around them.
-    let click_frames: Vec<usize> = clicks.iter().map(|&c| (c / HOP) + FFT / HOP / HOP + 1).collect();
+    // The clicks are where the two parts differ most. Centre framing pads by
+    // `fft_size / 2`, so sample `c` lands in frame `(c + fft_size/2) / hop`.
+    let click_frames: Vec<usize> = clicks.iter().map(|&c| (c + FFT / 2) / HOP).collect();
+    println!(
+        "  click frames {:?} (t = {:.2} s and {:.2} s)",
+        click_frames,
+        click_frames.first().copied().unwrap_or(0) as f64 * HOP as f64 / FS,
+        click_frames.get(1).copied().unwrap_or(0) as f64 * HOP as f64 / FS,
+    );
+    // Energy above 4 kHz: the tone has none, so anything there is click.
+    let hi_bin = (4_000.0 * FFT as f64 / FS) as usize;
     let band = |s: &dsp_spectral::Spectrum, f: usize| -> f64 {
-        let p = s.power(f);
-        p.iter().skip(FFT / 4).sum::<f64>()
+        s.power(f).iter().skip(hi_bin).sum::<f64>()
     };
     for (label, s) in [("harmonic", &harm), ("percussive", &perc)] {
-        let at_click: f64 = click_frames
-            .iter()
-            .map(|f| band(s, *f))
-            .fold(0.0, f64::max);
+        let at_click: f64 = click_frames.iter().map(|f| band(s, *f)).fold(0.0, f64::max);
         let elsewhere: f64 = (2..s.num_frames() - 2)
             .filter(|f| !click_frames.contains(f))
             .map(|f| band(s, f))
-            .fold(0.0f64, f64::max);
+            .sum::<f64>()
+            / ((s.num_frames() - 4) as f64);
         println!(
-            "  {label:<11} upper-band energy at the clicks {at_click:>12.2} vs elsewhere {elsewhere:>12.2}  ({:.1}×)",
+            "  {label:<11} >4 kHz energy: {at_click:>10.2} at a click vs {elsewhere:>8.2} mean elsewhere ({:.0}×)",
             at_click / elsewhere.max(1e-12)
         );
     }
@@ -209,20 +242,19 @@ fn main() {
         .position(|f| (f - peak_flux).abs() < 1e-12)
         .map(|i| i + 2)
         .unwrap_or(0);
-    let stats = |name: &str, v: &[f64], scale: f64| {
+    let stats = |label: &str, unit: &str, v: &[f64], scale: f64| {
         let mean = v.iter().sum::<f64>() / (v.len().max(1) as f64);
         println!(
-            "  {name:<22} mean {:>8.1}  min {:>8.1}  max {:>8.1}  {unit}",
+            "  {label:<22} mean {:>8.2} {unit:<7} min {:>8.2}  max {:>8.2}",
             mean * scale,
             v.iter().copied().fold(f64::INFINITY, f64::min) * scale,
             v.iter().copied().fold(f64::NEG_INFINITY, f64::max) * scale,
-            unit = name,
         );
     };
-    stats("centroid", &centroids, 1.0);
-    stats("bandwidth", &bandwidths, 1.0);
-    stats("flatness", &flatness, 1.0);
-    stats("rolloff (85 %)", &rolloff, 1.0);
+    stats("centroid", "Hz", &centroids, 1.0);
+    stats("bandwidth", "Hz", &bandwidths, 1.0);
+    stats("flatness", "", &flatness, 1.0);
+    stats("rolloff (85 %)", "Hz", &rolloff, 1.0);
     println!(
         "  spectral flux          peak {:.2} at frame {at} (t = {:.3} s), mean {:.2}",
         peak_flux,
@@ -246,13 +278,15 @@ fn main() {
     // ---- 6. Mel / MFCC front end -----------------------------------------
     println!("--- 6. mel / MFCC front end ---");
     let n_mels = 26usize;
-    let bank = spec.mel_filterbank(n_mels, 20.0, 7_800.0, FS);
-    let centres = mel_frequencies(n_mels, 20.0, 7_800.0);
+    // Span the whole band (0 → Nyquist) so the bank tiles it and the energies
+    // sum to the frame's power exactly.
+    let bank = spec.mel_filterbank(n_mels, 0.0, FS / 2.0, FS);
+    let centres = mel_frequencies(n_mels, 0.0, FS / 2.0);
     let frame = spec.frame(tone_region.len() / 2 + 2).expect("in range");
     let energies = bank.energies(frame);
     let coeffs = mfcc(&energies, 13);
     println!(
-        "  {n_mels} mel bands spanning 20 Hz – 7.8 kHz, centres {:.1} Hz … {:.1} Hz",
+        "  {n_mels} mel bands spanning 0 Hz – 8 kHz, centres {:.1} Hz … {:.1} Hz",
         centres.first().copied().unwrap_or(0.0),
         centres.last().copied().unwrap_or(0.0)
     );
@@ -272,7 +306,10 @@ fn main() {
     println!("--- summary ---");
     let final_snr = snr_db(&clean, &gated);
     println!("  input SNR        {input_snr:>7.2} dB");
-    println!("  gated SNR        {final_snr:>7.2} dB  ({:+.2} dB)", final_snr - input_snr);
+    println!(
+        "  gated SNR        {final_snr:>7.2} dB  ({:+.2} dB)",
+        final_snr - input_snr
+    );
     println!(
         "  analysis–synthesis round-trip: {:.1} dB SNR ({} reconstruction error)",
         snr_db(&noisy, &dsp_spectral::istft(&noise_spec, noise_only_end)),

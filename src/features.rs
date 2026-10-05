@@ -20,7 +20,7 @@
 //! **Reading flatness:** it is a *contrast* measure, not an absolute
 //! loudness one. A uniform magnitude spectrum reads exactly 1. White noise
 //! also reads high — ≈ 0.90 at 512 bins — because each bin's magnitude is
-//! Rayleigh-distributed and `E[ln R] − ln E[R]` is only −0.10; a pure tone
+//! Rayleigh-distributed and `E[ln R] − ln E[`R`]` is only −0.10; a pure tone
 //! reads three orders of magnitude lower. So "flatness ≈ 1" means *flat
 //! spectrum*, not *noise present*, and "flatness ≈ 0" means *tonal*.
 //!
@@ -48,9 +48,7 @@ fn bin_hz(spec: &Spectrum, sample_rate: f64) -> f64 {
 
 /// The magnitude spectra of every frame, as rows.
 fn magnitude_rows(spec: &Spectrum) -> Vec<Vec<f64>> {
-    (0..spec.num_frames())
-        .map(|f| spec.magnitude(f))
-        .collect()
+    (0..spec.num_frames()).map(|f| spec.magnitude(f)).collect()
 }
 
 /// Spectral centroid in Hz per frame: the magnitude-weighted mean frequency.
@@ -79,8 +77,7 @@ pub fn spectral_centroid(spec: &Spectrum, sample_rate: f64) -> Vec<f64> {
             if total <= 0.0 {
                 return 0.0;
             }
-            mags
-                .iter()
+            mags.iter()
                 .enumerate()
                 .map(|(k, m)| (k as f64) * hz * m)
                 .sum::<f64>()
@@ -110,8 +107,7 @@ pub fn spectral_bandwidth(spec: &Spectrum, sample_rate: f64, centroid: &[f64]) -
             let c = if use_supplied {
                 centroid.get(t).copied().unwrap_or(0.0)
             } else {
-                mags
-                    .iter()
+                mags.iter()
                     .enumerate()
                     .map(|(k, m)| (k as f64) * hz * m)
                     .sum::<f64>()
@@ -153,7 +149,13 @@ pub fn spectral_flatness(spec: &Spectrum) -> Vec<f64> {
             }
             let log_sum: f64 = mags
                 .iter()
-                .map(|m| libm::log(if *m > FLATNESS_FLOOR { *m } else { FLATNESS_FLOOR }))
+                .map(|m| {
+                    libm::log(if *m > FLATNESS_FLOOR {
+                        *m
+                    } else {
+                        FLATNESS_FLOOR
+                    })
+                })
                 .sum();
             let geometric = libm::exp(log_sum / (n as f64));
             if geometric > arithmetic {
@@ -263,39 +265,33 @@ pub fn zero_crossing_rate(samples: &[f64]) -> f64 {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
     use super::{
-        spectral_bandwidth, spectral_centroid, spectral_flatness, spectral_flux,
-        spectral_rolloff, zero_crossing_rate,
+        spectral_bandwidth, spectral_centroid, spectral_flatness, spectral_flux, spectral_rolloff,
+        zero_crossing_rate,
     };
     use crate::complex::Complex;
-    use crate::stft::{Spectrum, stft};
+    use crate::stft::{stft, Spectrum};
     use crate::window::Window;
     use alloc::vec;
     use alloc::vec::Vec;
 
     /// A spectrogram of `frames` frames whose frame `t` has all its magnitude in
-/// bin `t % bins`, built on an `fft_size`-point transform.
-fn ramp(fft_size: usize, frames: usize) -> Spectrum {
-    let row_bins = fft_size / 2 + 1;
-    let frames: Vec<Vec<Complex>> = (0..frames)
-        .map(|t| {
-            (0..row_bins)
-                .map(|k| Complex::new(if k == t % row_bins { 2.0 } else { 0.0 }, 0.0))
-                .collect()
-        })
-        .collect();
-    Spectrum::from_parts(frames, 1, fft_size, Window::Hann, true).expect("valid")
-}
+    /// bin `t % bins`, built on an `fft_size`-point transform.
+    fn ramp(fft_size: usize, frames: usize) -> Spectrum {
+        let row_bins = fft_size / 2 + 1;
+        let frames: Vec<Vec<Complex>> = (0..frames)
+            .map(|t| {
+                (0..row_bins)
+                    .map(|k| Complex::new(if k == t % row_bins { 2.0 } else { 0.0 }, 0.0))
+                    .collect()
+            })
+            .collect();
+        Spectrum::from_parts(frames, 1, fft_size, Window::Hann, true).expect("valid")
+    }
 
     #[test]
     fn silent_frames_are_zero_not_nan() {
-        let spec = Spectrum::from_parts(
-            vec![vec![Complex::ZERO; 5]; 2],
-            1,
-            8,
-            Window::Hann,
-            true,
-        )
-        .expect("valid");
+        let spec = Spectrum::from_parts(vec![vec![Complex::ZERO; 5]; 2], 1, 8, Window::Hann, true)
+            .expect("valid");
         assert_eq!(spectral_centroid(&spec, 8_000.0), vec![0.0, 0.0]);
         assert_eq!(spectral_bandwidth(&spec, 8_000.0, &[]), vec![0.0, 0.0]);
         assert_eq!(spectral_flatness(&spec), vec![0.0, 0.0]);
@@ -368,7 +364,11 @@ fn ramp(fft_size: usize, frames: usize) -> Spectrum {
             Complex::ZERO,
         ]];
         let spec = Spectrum::from_parts(frames, 1, 8, Window::Hann, true).expect("valid");
-        assert!(spectral_flatness(&spec)[0] < 1e-3, "flatness {}", spectral_flatness(&spec)[0]);
+        assert!(
+            spectral_flatness(&spec)[0] < 1e-3,
+            "flatness {}",
+            spectral_flatness(&spec)[0]
+        );
         assert!(spectral_flatness(&spec)[0] >= 0.0);
     }
 
@@ -415,9 +415,11 @@ fn ramp(fft_size: usize, frames: usize) -> Spectrum {
         assert_eq!(zero_crossing_rate(&[1.0, 0.0, -1.0]), 0.0);
         assert_eq!(zero_crossing_rate(&[-1.0, 0.0, 1.0]), 0.0);
         // A Nyquist-frequency square wave crosses at every sample.
-        let sq: Vec<f64> = (0..8).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect();
+        let sq: Vec<f64> = (0..8)
+            .map(|i| if i % 2 == 0 { 1.0 } else { -1.0 })
+            .collect();
         assert!((zero_crossing_rate(&sq) - 1.0).abs() < 1e-15);
-        assert_eq!(zero_crossing_rate(&vec![0.0; 4]), 0.0);
+        assert_eq!(zero_crossing_rate(&[0.0; 4]), 0.0);
     }
 
     #[test]

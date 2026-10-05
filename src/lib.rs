@@ -126,6 +126,16 @@
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
+// Pedantic is surfaced (not denied) by the shared CI job; these four groups
+// are allowed here with the reason they are inherent to the domain, and
+// nothing else is suppressed.
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    reason = "spectral algebra is index math: bin numbers and hop offsets are               usize by construction and become f64 bin frequencies, and f64               magnitudes become back into linear gains. Every conversion is               bounded by an explicit range check (bins < fft_size/2 + 1, taps               indexed through .get()) before it is used."
+)]
 
 extern crate alloc;
 
@@ -145,10 +155,12 @@ pub use features::{
     spectral_bandwidth, spectral_centroid, spectral_flatness, spectral_flux, spectral_rolloff,
     zero_crossing_rate,
 };
-pub use mel::{MelBank, hz_to_mel, mel_frequencies, mel_to_hz, mfcc, mfcc_with_lifter, real_cepstrum};
-pub use restore::{
-    GateConfig, NoiseProfile, denoise, harmonic_percussive_split, snr_db, spectral_gate,
-    spectral_smooth, spectral_subtract,
+pub use mel::{
+    hz_to_mel, mel_frequencies, mel_to_hz, mfcc, mfcc_with_lifter, real_cepstrum, MelBank,
 };
-pub use stft::{Spectrum, istft, resample_frames, stft};
+pub use restore::{
+    denoise, harmonic_percussive_split, snr_db, spectral_gate, spectral_smooth, spectral_subtract,
+    GateConfig, NoiseProfile,
+};
+pub use stft::{istft, resample_frames, stft, Spectrum};
 pub use window::Window;

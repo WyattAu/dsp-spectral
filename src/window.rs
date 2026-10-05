@@ -95,7 +95,13 @@ impl Window {
                 coeffs
                     .iter()
                     .enumerate()
-                    .map(|(k, &a)| if k == 0 { a } else { a * cos((k as f64) * theta) })
+                    .map(|(k, &a)| {
+                        if k == 0 {
+                            a
+                        } else {
+                            a * cos((k as f64) * theta)
+                        }
+                    })
                     .sum()
             })
             .collect()

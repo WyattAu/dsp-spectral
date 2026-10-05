@@ -37,10 +37,9 @@ impl fmt::Display for SpectralError {
             SpectralError::Config(msg) => write!(f, "invalid spectral configuration: {msg}"),
             SpectralError::EmptyInput => write!(f, "input is empty"),
             SpectralError::FrameOutOfRange(i) => write!(f, "frame index {i} is out of range"),
-            SpectralError::NonFinite => write!(
-                f,
-                "input contains a non-finite value (NaN or infinity)"
-            ),
+            SpectralError::NonFinite => {
+                write!(f, "input contains a non-finite value (NaN or infinity)")
+            }
             SpectralError::Dsp(msg) => write!(f, "dsp-core kernel failed: {msg}"),
         }
     }

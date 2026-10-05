@@ -24,7 +24,7 @@ use dsp_core::math::{db_to_linear, linear_to_db};
 
 use crate::config::StftConfig;
 use crate::error::SpectralError;
-use crate::stft::{Spectrum, istft, stft};
+use crate::stft::{istft, stft, Spectrum};
 
 /// Default median half-width for [`harmonic_percussive_split`]: a 17-tap
 /// median along each axis.
@@ -487,7 +487,9 @@ fn clamp_index(i: isize, n: usize) -> usize {
     if i < 0 {
         0
     } else {
-        usize::try_from(i).unwrap_or(n.saturating_sub(1)).min(n.saturating_sub(1))
+        usize::try_from(i)
+            .unwrap_or(n.saturating_sub(1))
+            .min(n.saturating_sub(1))
     }
 }
 
@@ -549,10 +551,7 @@ pub fn harmonic_percussive_split(spec: &Spectrum, hps_ratio: f64) -> (Spectrum, 
     let half = if hps_ratio.is_finite() {
         // Round to the nearest whole tap, floor at 1, cap so the median
         // window never exceeds the spectrogram's own extent.
-        let max_half = core::cmp::max(
-            1,
-            core::cmp::max(spec.num_frames(), spec.bin_count()) / 2,
-        );
+        let max_half = core::cmp::max(1, core::cmp::max(spec.num_frames(), spec.bin_count()) / 2);
         let rounded = libm::floor(hps_ratio + 0.5);
         if rounded < 1.0 {
             1
@@ -565,9 +564,7 @@ pub fn harmonic_percussive_split(spec: &Spectrum, hps_ratio: f64) -> (Spectrum, 
         HPSS_MEDIAN_HALF_WIDTH
     };
 
-    let mags: Vec<Vec<f64>> = (0..spec.num_frames())
-        .map(|t| spec.magnitude(t))
-        .collect();
+    let mags: Vec<Vec<f64>> = (0..spec.num_frames()).map(|t| spec.magnitude(t)).collect();
     let h_est = median_filter(&mags, true, half);
     let p_est = median_filter(&mags, false, half);
     // A small absolute floor keeps the mask well-defined on silent frames
@@ -599,8 +596,14 @@ pub fn harmonic_percussive_split(spec: &Spectrum, hps_ratio: f64) -> (Spectrum, 
     // here; `Default` (an empty 2-point Hann spectrogram) keeps the function
     // total regardless.
     let build = |rows| {
-        Spectrum::from_parts(rows, spec.hop(), spec.fft_size(), spec.window(), spec.is_centered())
-            .unwrap_or_default()
+        Spectrum::from_parts(
+            rows,
+            spec.hop(),
+            spec.fft_size(),
+            spec.window(),
+            spec.is_centered(),
+        )
+        .unwrap_or_default()
     };
     (build(harm), build(perc))
 }
@@ -638,7 +641,8 @@ pub fn spectral_smooth(spec: &Spectrum, kernel: &[f64]) -> Result<Spectrum, Spec
                     .map(|(k, c)| {
                         let mut acc = 0.0;
                         for (j, &w) in kernel.iter().enumerate() {
-                            let kk = clamp_index(k as isize + (j as isize - half as isize), mags.len());
+                            let kk =
+                                clamp_index(k as isize + (j as isize - half as isize), mags.len());
                             acc += w * mags.get(kk).copied().unwrap_or(0.0);
                         }
                         Complex::from_polar(acc, c.phase())
@@ -706,13 +710,13 @@ use crate::complex::Complex;
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
     use super::{
-        GateConfig, HPSS_MEDIAN_HALF_WIDTH, NoiseProfile, clamp_index, denoise,
-        harmonic_percussive_split, median_filter, median_in_place, snr_db, smooth_time,
-        spectral_gate, spectral_smooth, spectral_subtract,
+        clamp_index, denoise, harmonic_percussive_split, median_filter, median_in_place,
+        smooth_time, snr_db, spectral_gate, spectral_smooth, spectral_subtract, GateConfig,
+        NoiseProfile, HPSS_MEDIAN_HALF_WIDTH,
     };
     use crate::config::StftConfig;
     use crate::error::SpectralError;
-    use crate::stft::{Spectrum, stft};
+    use crate::stft::{stft, Spectrum};
     use crate::window::Window;
     use alloc::vec;
     use alloc::vec::Vec;
@@ -810,7 +814,9 @@ mod tests {
         assert!(profile.peak() > 0.0);
         assert!(profile.magnitude_at(0) > 0.0);
         assert_eq!(profile.magnitude_at(9_999), 0.0);
-        assert!(profile.validate_for(&stft(&noise, &cfg).expect("ok")).is_ok());
+        assert!(profile
+            .validate_for(&stft(&noise, &cfg).expect("ok"))
+            .is_ok());
 
         // A profile with a mismatched bin count is a config error.
         let other = NoiseProfile::estimate(&noise, &StftConfig::new(32, 16)).expect("valid");
@@ -881,8 +887,7 @@ mod tests {
         let mut survivors = 0;
         let mags = spec.magnitude(0);
         let gated_mags = almost.magnitude(0);
-        for k in 0..spec.bin_count() {
-            let a = mags[k];
+        for (k, &a) in mags.iter().enumerate() {
             let b = gated_mags.get(k).copied().unwrap_or(0.0);
             if a > 1e-12 && (b / a - 1.0).abs() < 1e-9 {
                 survivors += 1;
@@ -962,7 +967,10 @@ mod tests {
             let after = mag(&out, f);
             assert!(after <= before + 1e-12, "frame {f} gained energy");
             if before > 1e-12 {
-                assert!(after >= before * floor_gain - 1e-12, "frame {f} over-attenuated");
+                assert!(
+                    after >= before * floor_gain - 1e-12,
+                    "frame {f} over-attenuated"
+                );
             }
         }
         // The gate is total: no panics on an empty spectrogram.
@@ -1059,7 +1067,8 @@ mod tests {
         }
         let spec = stft(&x, &cfg).expect("ok");
 
-        let bin_of = |hz: f64| ((hz * (cfg.fft_size as f64) / fs) as usize).min(spec.bin_count() - 1);
+        let bin_of =
+            |hz: f64| ((hz * (cfg.fft_size as f64) / fs) as usize).min(spec.bin_count() - 1);
         let tone_bin = bin_of(400.0);
         let hi_bin = bin_of(2_000.0);
         let nyq = spec.bin_count() - 1;
@@ -1078,9 +1087,7 @@ mod tests {
         let power_at = |s: &Spectrum, f: usize, k: usize| {
             s.magnitude(f).get(k).copied().unwrap_or(0.0).powi(2)
         };
-        let band_power = |s: &Spectrum, f: usize| {
-            s.power(f)[hi_bin..=nyq].iter().sum::<f64>()
-        };
+        let band_power = |s: &Spectrum, f: usize| s.power(f)[hi_bin..=nyq].iter().sum::<f64>();
 
         // The harmonic part keeps the tone: at its bin the harmonic estimate
         // is orders of magnitude above the percussive one.
@@ -1095,17 +1102,19 @@ mod tests {
         // percussive estimate at the click frame and nowhere else.
         let click_hi = band_power(&perc, click_frame);
         let steady_hi = band_power(&perc, steady_frame);
-        assert!(click_hi > 100.0 * steady_hi, "click hi {click_hi} vs {steady_hi}");
-        assert!(band_power(&harm, click_frame) < 0.01 * click_hi, "click is harmonic");
+        assert!(
+            click_hi > 100.0 * steady_hi,
+            "click hi {click_hi} vs {steady_hi}"
+        );
+        assert!(
+            band_power(&harm, click_frame) < 0.01 * click_hi,
+            "click is harmonic"
+        );
 
         // The complementary mask splits *magnitude* exactly: |harmonic| +
         // |percussive| == |X| at every bin, at every frame.
         for f in 0..spec.num_frames() {
-            let (a, b, c) = (
-                spec.magnitude(f),
-                harm.magnitude(f),
-                perc.magnitude(f),
-            );
+            let (a, b, c) = (spec.magnitude(f), harm.magnitude(f), perc.magnitude(f));
             for k in 0..spec.bin_count() {
                 let lhs = b[k] + c[k];
                 let rhs = a[k];

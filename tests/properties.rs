@@ -1,4 +1,9 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, missing_docs)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    missing_docs
+)]
 //! Property-based invariants over arbitrary signals, configs, and spectra.
 //!
 //! These are the tests that generalise the examples: instead of checking one
@@ -8,10 +13,10 @@
 //! spectrum.
 
 use dsp_spectral::{
-    Complex, GateConfig, NoiseProfile, Spectrum, StftConfig, Window, denoise, harmonic_percussive_split,
-    hz_to_mel, istft, mel_frequencies, mel_to_hz, mfcc, real_cepstrum, spectral_bandwidth,
-    spectral_centroid, spectral_flatness, spectral_flux, spectral_rolloff, spectral_subtract, stft,
-    zero_crossing_rate,
+    denoise, harmonic_percussive_split, hz_to_mel, istft, mel_frequencies, mel_to_hz, mfcc,
+    real_cepstrum, spectral_bandwidth, spectral_centroid, spectral_flatness, spectral_flux,
+    spectral_rolloff, spectral_subtract, stft, zero_crossing_rate, Complex, GateConfig,
+    NoiseProfile, Spectrum, StftConfig, Window,
 };
 use proptest::prelude::*;
 
@@ -31,23 +36,26 @@ fn unit_signal() -> impl Strategy<Value = Vec<f64>> {
 
 /// A power-of-two transform size in [8, 4096] with a hop in [1, N/2].
 fn config_strategy() -> impl Strategy<Value = StftConfig> {
-    (3u32..13, any::<bool>(), 0usize..6, 1.0f64..192_000.0)
-        .prop_flat_map(|(exp, centered, window, sample_rate)| {
+    (3u32..13, any::<bool>(), 0usize..6, 1.0f64..192_000.0).prop_flat_map(
+        |(exp, centered, window, sample_rate)| {
             let fft_size = 1usize << exp;
-            (1..=fft_size / 2)
-                .prop_map(move |hop| StftConfig {
-                    window: WINDOWS[window],
-                    hop,
-                    fft_size,
-                    center: centered,
-                    window_overlap: 0.0,
-                    sample_rate,
-                })
-        })
+            (1..=fft_size / 2).prop_map(move |hop| StftConfig {
+                window: WINDOWS[window],
+                hop,
+                fft_size,
+                center: centered,
+                window_overlap: 0.0,
+                sample_rate,
+            })
+        },
+    )
 }
 
 fn worst_err(a: &[f64], b: &[f64]) -> f64 {
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0, f64::max)
 }
 
 /// The half-open range of samples a spectrogram can actually reconstruct.
@@ -56,28 +64,38 @@ fn worst_err(a: &[f64], b: &[f64]) -> f64 {
 /// frames cover it *and* the squared-window weight accumulated there clears
 /// the floor `istft` uses. Everything else is documented to come back as an
 /// exact zero, which this test then asserts.
-fn reconstructible_range(config: &StftConfig, spec: &Spectrum, len: usize) -> std::ops::Range<usize> {
+fn reconstructible_range(
+    config: &StftConfig,
+    spec: &Spectrum,
+    len: usize,
+) -> std::ops::Range<usize> {
     /// The same floor `istft` applies.
     const MIN_WEIGHT: f64 = 1e-12;
     let taps = config.window.coefficients(config.fft_size);
-    let pad = if config.center { config.fft_size / 2 } else { 0 };
+    let pad = if config.center {
+        config.fft_size / 2
+    } else {
+        0
+    };
     let mut weight = vec![0.0f64; len];
     for f in 0..spec.num_frames() {
-        for j in 0..config.fft_size {
-            let idx = f * config.hop + j;
+        for (j, &tap) in taps.iter().enumerate() {
             // Output index, undoing the centre offset.
-            let Some(out_idx) = idx.checked_sub(pad) else {
+            let Some(out_idx) = (f * config.hop + j).checked_sub(pad) else {
                 continue;
             };
             if out_idx >= len {
                 continue;
             }
-            weight[out_idx] += taps[j] * taps[j];
+            weight[out_idx] += tap * tap;
         }
     }
     let usable = |i: usize| weight[i] > MIN_WEIGHT;
     let start = (0..len).find(|i| usable(*i)).unwrap_or(len);
-    let end = (start..len).rev().find(|i| usable(*i)).map_or(start, |i| i + 1);
+    let end = (start..len)
+        .rev()
+        .find(|i| usable(*i))
+        .map_or(start, |i| i + 1);
     start..end
 }
 
@@ -431,7 +449,7 @@ proptest! {
     ) {
         let cfg = StftConfig::new(fft_size, hop);
         let x = vec![0.1; 128];
-        if let Ok(_) = stft(&x, &cfg) {
+        if stft(&x, &cfg).is_ok() {
             // Accepted, so it must have been a genuinely valid pair.
             prop_assert!(fft_size >= 2 && fft_size.is_power_of_two());
             prop_assert!(hop >= 1 && hop <= fft_size / 2);

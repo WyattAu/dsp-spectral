@@ -13,9 +13,21 @@ concurrency:
 
 jobs:
   quality:
-    uses: WyattAu/engineering-standards/.github/workflows/rust-kit.yml@e23c50cf289f55bbb91001c91bbac7de018c11c3
+    uses: WyattAu/engineering-standards/.github/workflows/rust-kit.yml@e23c50cf289f55bbb91001c91bbac7de018c11c3 # main @ 2026-10-03
     with:
       tier: a
       all-features: true
+      miri: true
       embedded: true
       wasm: true
+
+  fuzz-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+      - name: install cargo-fuzz
+        run: cargo install --locked cargo-fuzz
+      - name: fuzz smoke — spectral_fuzz (30 s, fleet §4)
+        run: cargo fuzz run spectral_fuzz -- -max_total_time=30

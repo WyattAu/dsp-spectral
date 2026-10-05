@@ -1,11 +1,16 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, missing_docs)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    missing_docs
+)]
 //! Mel scale, filterbank, MFCC, and cepstrum.
 
 use core::f64::consts::{PI, TAU};
 
 use dsp_spectral::{
-    Complex, MelBank, Spectrum, Window, hz_to_mel, mel_frequencies, mel_to_hz, mfcc,
-    mfcc_with_lifter, real_cepstrum, stft,
+    hz_to_mel, mel_frequencies, mel_to_hz, mfcc, mfcc_with_lifter, real_cepstrum, stft, Complex,
+    MelBank, Spectrum, Window,
 };
 
 fn lcg(seed: u64) -> impl FnMut() -> f64 {
@@ -24,11 +29,15 @@ const HZ_1000_IN_MEL: f64 = 999.985_537_139_6;
 #[test]
 fn mel_scale_matches_htk_reference_points() {
     assert!((hz_to_mel(0.0) - 0.0).abs() < 1e-15);
-    assert!((hz_to_mel(100.0) - 150.489_102_407_097_1).abs() < 1e-9, "{}", hz_to_mel(100.0));
+    assert!(
+        (hz_to_mel(100.0) - 150.489_102_407_097_1).abs() < 1e-9,
+        "{}",
+        hz_to_mel(100.0)
+    );
     assert!((hz_to_mel(1_000.0) - HZ_1000_IN_MEL).abs() < 1e-9);
-    assert!((hz_to_mel(4_000.0) - 2_146.064_527_506_190_2).abs() < 1e-9);
-    assert!((hz_to_mel(8_000.0) - 2_840.023_046_708_318_8).abs() < 1e-9);
-    assert!((hz_to_mel(20_000.0) - 3_816.913_632_623_705).abs() < 1e-9);
+    assert!((hz_to_mel(4_000.0) - 2_146.064_527_506_19).abs() < 1e-9);
+    assert!((hz_to_mel(8_000.0) - 2_840.023_046_708_319).abs() < 1e-9);
+    assert!((hz_to_mel(20_000.0) - 3_816.913_632_623_70).abs() < 1e-9);
     assert!((hz_to_mel(44_100.0) - 4_687.037_032_488_187).abs() < 1e-9);
 
     // Inverses.
@@ -85,7 +94,10 @@ fn mel_frequencies_are_evenly_spaced_on_the_mel_scale() {
     }
     // Uniform in mel, not in Hz: the gaps must grow with frequency.
     let gaps: Vec<f64> = f.windows(2).map(|w| w[1] - w[0]).collect();
-    assert!(gaps.windows(2).all(|w| w[1] > w[0]), "gaps must widen: {gaps:?}");
+    assert!(
+        gaps.windows(2).all(|w| w[1] > w[0]),
+        "gaps must widen: {gaps:?}"
+    );
     assert_eq!(gaps.len(), n - 1);
     // ... and the mel gaps are equal.
     // Each centre sits an exact whole number of steps above f_min in mel.
@@ -135,20 +147,27 @@ fn mel_filterbank_tiles_the_band_and_conserves_energy() {
         for m in 0..n_mels {
             let row = bank.filter(m).expect("filter");
             assert_eq!(row.len(), bins);
-            assert!(row.iter().all(|w| (0.0..=1.0).contains(w)), "mel {m}: {row:?}");
+            assert!(
+                row.iter().all(|w| (0.0..=1.0).contains(w)),
+                "mel {m}: {row:?}"
+            );
             let peak = row.iter().copied().fold(0.0f64, f64::max);
             assert!(peak > 0.0, "mel {m} is empty: {row:?}");
             assert!(row.contains(&peak), "mel {m} peak is not a sample");
         }
         // The rows tile the band.
         for k in 0..bins {
-            let rowsum: f64 = (0..n_mels).map(|m| bank.filter(m).expect("filter")[k]).sum();
+            let rowsum: f64 = (0..n_mels)
+                .map(|m| bank.filter(m).expect("filter")[k])
+                .sum();
             assert!((rowsum - 1.0).abs() < 1e-12, "bin {k} rowsum {rowsum}");
         }
 
         // And energy is conserved for an arbitrary frame.
         let mut rng = lcg(0xE1E);
-        let frame: Vec<Complex> = (0..bins).map(|_| Complex::from_polar(rng().abs() + 0.1, rng())).collect();
+        let frame: Vec<Complex> = (0..bins)
+            .map(|_| Complex::from_polar(rng().abs() + 0.1, rng()))
+            .collect();
         let e = bank.energies(&frame);
         let naive: f64 = (0..n_mels)
             .map(|m| {
@@ -320,7 +339,10 @@ fn mfcc_matches_a_naive_dct_ii_reference() {
                 2.0f64.sqrt() / (k as f64).sqrt()
             };
             let want = scale * sum;
-            assert!((actual - want).abs() < 1e-12, "K={k} m={m}: {actual} vs {want}");
+            assert!(
+                (actual - want).abs() < 1e-12,
+                "K={k} m={m}: {actual} vs {want}"
+            );
         }
     }
 }
@@ -334,7 +356,11 @@ fn mfcc_of_a_constant_frame_has_only_c0() {
             let c = mfcc(&vec![e; k], k);
             assert_eq!(c.len(), k);
             let want = (k as f64).sqrt() * e.ln();
-            assert!((c[0] - want).abs() < 1e-12, "K={k} e={e}: {} vs {want}", c[0]);
+            assert!(
+                (c[0] - want).abs() < 1e-12,
+                "K={k} e={e}: {} vs {want}",
+                c[0]
+            );
             assert!(c[1..].iter().all(|v| v.abs() < 1e-12), "K={k}: {c:?}");
         }
     }
@@ -350,7 +376,7 @@ fn mfcc_respects_n_coeffs_and_degenerate_inputs() {
     assert!(mfcc(&[], 0).is_empty());
     // A silent frame floors every log, so the coefficients stay finite and
     // c[0] takes the floor's value rather than −∞.
-    let silent = mfcc(&vec![0.0; 13], 13);
+    let silent = mfcc(&[0.0; 13], 13);
     assert!(silent.iter().all(|v| v.is_finite()), "{silent:?}");
     let floor = 13f64.sqrt() * 1e-10f64.ln();
     assert!((silent[0] - floor).abs() < 1e-12);
@@ -364,7 +390,10 @@ fn mfcc_lifter_leaves_c0_and_lifts_high_quefrencies() {
     for l in [2usize, 13, 22] {
         let lifted = mfcc_with_lifter(&e, 13, l);
         assert_eq!(lifted.len(), 13);
-        assert!((lifted[0] - plain[0]).abs() < 1e-15, "lifter {l} moved c[0]");
+        assert!(
+            (lifted[0] - plain[0]).abs() < 1e-15,
+            "lifter {l} moved c[0]"
+        );
         for m in 1..13 {
             let q = m.min(l);
             let weight = 1.0 + 0.5 * (l as f64) * (PI * (q as f64) / (l as f64)).sin();
@@ -410,7 +439,10 @@ fn mfcc_from_a_real_stft_is_stable_across_frames() {
         let energies = bank.energies(spec.frame(f).expect("in range"));
         let coeffs = mfcc(&energies, 13);
         assert_eq!(coeffs.len(), 13);
-        assert!(coeffs.iter().all(|v| v.is_finite()), "frame {f}: {coeffs:?}");
+        assert!(
+            coeffs.iter().all(|v| v.is_finite()),
+            "frame {f}: {coeffs:?}"
+        );
         match &reference {
             None => reference = Some(coeffs),
             Some(prev) => {
@@ -439,7 +471,11 @@ fn real_cepstrum_peaks_at_the_pitch_period() {
     // A periodic impulse train has a harmonic comb in its log spectrum, so its
     // cepstrum peaks at every multiple of the period. The first multiple is
     // the pitch.
-    for (n, period) in [(1_024usize, 16usize), (2_048usize, 40usize), (4_096usize, 100usize)] {
+    for (n, period) in [
+        (1_024usize, 16usize),
+        (2_048usize, 40usize),
+        (4_096usize, 100usize),
+    ] {
         let x: Vec<f64> = (0..n)
             .map(|i| if i % period == 0 { 1.0 } else { 0.0 })
             .collect();
@@ -519,7 +555,12 @@ fn real_cepstrum_is_real_and_symmetric() {
     // The log magnitude spectrum was mirrored hermitianly, so the inverse is
     // real and symmetric: c[q] == c[N-q].
     for q in 1..n / 2 {
-        assert!((c[q] - c[n - q]).abs() < 1e-12, "q={q}: {} vs {}", c[q], c[n - q]);
+        assert!(
+            (c[q] - c[n - q]).abs() < 1e-12,
+            "q={q}: {} vs {}",
+            c[q],
+            c[n - q]
+        );
     }
     // c[0] carries the mean log magnitude. Compare it against that mean,
     // computed naively from the FFT magnitudes.
@@ -532,7 +573,11 @@ fn real_cepstrum_is_real_and_symmetric() {
             let re = c[0];
             let im = c[1];
             let m = (re * re + im * im).sqrt();
-            if m > 1e-10 { m.ln() } else { 1e-10f64.ln() }
+            if m > 1e-10 {
+                m.ln()
+            } else {
+                1e-10f64.ln()
+            }
         })
         .sum();
     let want_c0 = log_sum / (n as f64);
@@ -565,7 +610,11 @@ fn mel_filterbank_handles_short_and_empty_frames() {
     assert_eq!(e.len(), 8);
     assert!(e.iter().all(|v| v.is_finite()));
     let naive: f64 = (0..8)
-        .map(|m| (0..10).map(|k| bank.filter(m).expect("filter")[k]).sum::<f64>())
+        .map(|m| {
+            (0..10)
+                .map(|k| bank.filter(m).expect("filter")[k])
+                .sum::<f64>()
+        })
         .sum();
     assert!((e.iter().sum::<f64>() - naive * 1.0).abs() < 1e-9);
     // An empty frame is zero energy everywhere.

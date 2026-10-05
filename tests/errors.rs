@@ -1,16 +1,21 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, missing_docs)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    missing_docs
+)]
 //! Error contract: every variant reachable, every `Display` stable, every
 //! public entry point total on empty/short/non-finite input.
 
-use core::fmt::Write as _;
 use core::f64::consts::TAU;
+use core::fmt::Write as _;
 
 use dsp_spectral::{
-    Complex, GateConfig, MelBank, NoiseProfile, SpectralError, Spectrum, StftConfig, Window,
     denoise, harmonic_percussive_split, hz_to_mel, istft, mel_frequencies, mel_to_hz, mfcc,
     real_cepstrum, resample_frames, spectral_bandwidth, spectral_centroid, spectral_flatness,
     spectral_flux, spectral_gate, spectral_rolloff, spectral_smooth, spectral_subtract, stft,
-    zero_crossing_rate,
+    zero_crossing_rate, Complex, GateConfig, MelBank, NoiseProfile, SpectralError, Spectrum,
+    StftConfig, Window,
 };
 
 /// Every `SpectralError` variant renders exactly this text.
@@ -133,10 +138,7 @@ fn stft_rejects_empty_and_non_finite_input() {
         SpectralError::NonFinite
     );
     // And real_cepstrum.
-    assert_eq!(
-        real_cepstrum(&[]).unwrap_err(),
-        SpectralError::EmptyInput
-    );
+    assert_eq!(real_cepstrum(&[]).unwrap_err(), SpectralError::EmptyInput);
     assert_eq!(
         real_cepstrum(&[f64::INFINITY; 8]).unwrap_err(),
         SpectralError::NonFinite
@@ -159,7 +161,10 @@ fn frame_index_errors_are_reported_precisely() {
     );
     // In-range indices work.
     for f in 0..spec.num_frames() {
-        assert_eq!(spec.frame_checked(f).expect("in range").len(), spec.bin_count());
+        assert_eq!(
+            spec.frame_checked(f).expect("in range").len(),
+            spec.bin_count()
+        );
     }
     // Out-of-range magnitude/power accessors yield empty vectors.
     assert!(spec.magnitude(spec.num_frames()).is_empty());
@@ -214,12 +219,10 @@ fn noise_profile_validation_errors() {
     // Bin-count mismatch.
     let other = stft(&[0.2; 256], &StftConfig::new(32, 8)).expect("valid");
     let mismatched = NoiseProfile::from_frames(&other, &[0]);
-    assert!(
-        matches!(
-            mismatched.validate_for(&spec),
-            Err(SpectralError::Config(m)) if m.contains("bins")
-        )
-    );
+    assert!(matches!(
+        mismatched.validate_for(&spec),
+        Err(SpectralError::Config(m)) if m.contains("bins")
+    ));
     // Every operation that takes a profile validates it.
     for r in [
         spectral_gate(&spec, &mismatched, &GateConfig::default()).err(),
@@ -233,7 +236,10 @@ fn noise_profile_validation_errors() {
     // Non-finite profiles are rejected: build one through the public escape
     // hatch.
     let broken = NoiseProfile::from_magnitudes(vec![f64::NAN; spec.bin_count()], 8_000.0);
-    assert_eq!(broken.validate_for(&spec).unwrap_err(), SpectralError::NonFinite);
+    assert_eq!(
+        broken.validate_for(&spec).unwrap_err(),
+        SpectralError::NonFinite
+    );
     assert!(spectral_gate(&spec, &broken, &GateConfig::default()).is_err());
 }
 
@@ -265,10 +271,7 @@ fn gate_config_validation_errors() {
         },
     ] {
         assert!(
-            matches!(
-                gate.validate(),
-                Err(SpectralError::Config(_))
-            ),
+            matches!(gate.validate(), Err(SpectralError::Config(_))),
             "{gate:?}"
         );
         assert!(spectral_gate(&spec, &profile, &gate).is_err());
@@ -448,7 +451,10 @@ fn every_feature_is_total_on_a_single_sample() {
         let x: Vec<f64> = (0..len).map(|i| if i == 0 { 1.0 } else { 0.0 }).collect();
         let spec = stft(&x, &cfg).expect("valid");
         assert!(spec.num_frames() >= 1);
-        assert_eq!(spectral_centroid(&spec, cfg.sample_rate).len(), spec.num_frames());
+        assert_eq!(
+            spectral_centroid(&spec, cfg.sample_rate).len(),
+            spec.num_frames()
+        );
         assert_eq!(spectral_flatness(&spec).len(), spec.num_frames());
         assert_eq!(spectral_flux(&spec).len(), spec.num_frames());
         assert_eq!(
@@ -517,7 +523,11 @@ fn window_coefficients_handle_every_length() {
             // overlap_sum is total for every hop, including zero.
             for hop in [0usize, 1, 2, n / 2, n, 2 * n] {
                 let v = window.overlap_sum(n, hop);
-                assert!(v.is_finite() && v >= 0.0, "{} n={n} hop={hop}", window.name());
+                assert!(
+                    v.is_finite() && v >= 0.0,
+                    "{} n={n} hop={hop}",
+                    window.name()
+                );
             }
         }
     }
@@ -579,7 +589,9 @@ fn hpss_is_total_on_every_input() {
 fn denoise_is_total_on_short_and_silent_input() {
     let cfg = StftConfig::new(64, 16);
     for len in [1usize, 2, 7, 63, 64, 65, 1_024] {
-        let x: Vec<f64> = (0..len).map(|i| 0.2 * (TAU * 0.01 * i as f64).sin()).collect();
+        let x: Vec<f64> = (0..len)
+            .map(|i| 0.2 * (TAU * 0.01 * i as f64).sin())
+            .collect();
         let spec = stft(&x, &cfg).expect("valid");
         let profile = NoiseProfile::from_frames(&spec, &[0]);
         let out = denoise(&x, &cfg, &profile, &GateConfig::default()).expect("valid");
@@ -621,7 +633,11 @@ fn window_shape_endpoints_are_as_documented() {
             );
             // Symmetric, by construction.
             for i in 0..n {
-                assert!((c[i] - c[n - 1 - i]).abs() < 1e-15, "{} i={i}", window.name());
+                assert!(
+                    (c[i] - c[n - 1 - i]).abs() < 1e-15,
+                    "{} i={i}",
+                    window.name()
+                );
             }
         }
     }

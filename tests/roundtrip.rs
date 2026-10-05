@@ -1,4 +1,9 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, missing_docs)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    missing_docs
+)]
 //! Analysis–synthesis: the round-trip is the contract this crate rests on.
 //!
 //! These are the tests that would catch the class of bug that is invisible
@@ -8,7 +13,7 @@
 
 use core::f64::consts::TAU;
 
-use dsp_spectral::{Window, istft, stft, StftConfig};
+use dsp_spectral::{istft, stft, StftConfig, Window};
 
 /// Deterministic LCG so every failure is reproducible.
 fn lcg(seed: u64) -> impl FnMut() -> f64 {
@@ -28,7 +33,10 @@ fn white(n: usize, seed: u64) -> Vec<f64> {
 
 /// Largest absolute sample error over a pair of buffers.
 fn worst_err(a: &[f64], b: &[f64]) -> f64 {
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0, f64::max)
 }
 
 const WINDOWS: [Window; 6] = [
@@ -87,7 +95,8 @@ fn roundtrip_holds_for_musical_content() {
     let x: Vec<f64> = (0..n)
         .map(|i| {
             let t = i as f64 / fs;
-            let chord = (TAU * 220.0 * t).sin() + (TAU * 277.18 * t).sin() + (TAU * 329.63 * t).sin();
+            let chord =
+                (TAU * 220.0 * t).sin() + (TAU * 277.18 * t).sin() + (TAU * 329.63 * t).sin();
             let bass = 0.6 * (TAU * 55.0 * t).sin();
             let click = if i % 1_024 == 0 { 0.8 } else { 0.0 };
             0.2 * chord + bass + click
@@ -107,7 +116,9 @@ fn roundtrip_holds_at_every_signal_length() {
     // centre-padding math is easy to get wrong for the very short cases where
     // the reflected padding wraps more than once.
     let cfg = StftConfig::new(256, 64);
-    for len in [1usize, 2, 3, 7, 63, 64, 65, 127, 128, 129, 255, 256, 257, 1000] {
+    for len in [
+        1usize, 2, 3, 7, 63, 64, 65, 127, 128, 129, 255, 256, 257, 1000,
+    ] {
         let x = white(len, len as u64 + 1);
         let spec = stft(&x, &cfg).expect("valid");
         let y = istft(&spec, len);
@@ -140,7 +151,10 @@ fn roundtrip_is_exact_for_silence() {
     let x = vec![0.0; 4096];
     let y = istft(&stft(&x, &cfg).expect("valid"), x.len());
     assert_eq!(y.len(), 4096);
-    assert!(y.iter().all(|v| *v == 0.0), "silence should stay exactly silent");
+    assert!(
+        y.iter().all(|v| *v == 0.0),
+        "silence should stay exactly silent"
+    );
 }
 
 #[test]
@@ -197,7 +211,11 @@ fn parseval_holds_without_a_window_too() {
 /// half-spectrum (`DC..Nyquist`) by mirroring — DC and Nyquist count once.
 fn full_spectrum_power(spec: &dsp_spectral::Spectrum, frame: usize) -> f64 {
     let half = spec.power(frame);
-    let inner = half.iter().skip(1).take(half.len().saturating_sub(2)).sum::<f64>();
+    let inner = half
+        .iter()
+        .skip(1)
+        .take(half.len().saturating_sub(2))
+        .sum::<f64>();
     2.0 * inner + half.first().copied().unwrap_or(0.0) + half.last().copied().unwrap_or(0.0)
 }
 
@@ -216,11 +234,14 @@ fn roundtrip_with_uncentred_analysis_recovers_the_interior() {
         (Window::Hann, false),
         (Window::Blackman, false),
     ] {
-        let cfg = StftConfig::new(n, n / 4).with_window(window).with_center(false);
+        let cfg = StftConfig::new(n, n / 4)
+            .with_window(window)
+            .with_center(false);
         let y = istft(&stft(&x, &cfg).expect("valid"), x.len());
         let interior = worst_err(&x[n..x.len() - n], &y[n..x.len() - n]);
         assert!(interior < 1e-10, "{} interior: {interior:e}", window.name());
-        let edges = worst_err(&x[..n], &y[..n]).max(worst_err(&x[x.len() - n..], &y[x.len() - n..]));
+        let edges =
+            worst_err(&x[..n], &y[..n]).max(worst_err(&x[x.len() - n..], &y[x.len() - n..]));
         if exact_edges {
             assert!(edges < 1e-10, "{} edges: {edges:e}", window.name());
         } else {

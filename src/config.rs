@@ -93,9 +93,7 @@ impl StftConfig {
     /// finite and non-negative.
     pub fn validate(&self) -> Result<(), SpectralError> {
         if self.fft_size < 2 {
-            return Err(SpectralError::Config(String::from(
-                "fft_size must be >= 2",
-            )));
+            return Err(SpectralError::Config(String::from("fft_size must be >= 2")));
         }
         if !self.fft_size.is_power_of_two() {
             return Err(SpectralError::Config(format!(
@@ -259,7 +257,7 @@ impl StftConfig {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
-    use super::{DEFAULT_HOP, DEFAULT_SAMPLE_RATE, StftConfig};
+    use super::{StftConfig, DEFAULT_HOP, DEFAULT_SAMPLE_RATE};
     use crate::error::SpectralError;
     use crate::window::Window;
     use alloc::string::ToString;
@@ -278,7 +276,11 @@ mod tests {
         // where n/2 is one tap past the window's true peak (symmetric windows
         // peak at (n−1)/2), giving ≈ 1.5 rather than the periodic window's
         // clean 2.0.
-        assert!((cfg.nominal_overlap() - 1.5).abs() < 1e-2, "overlap {}", cfg.nominal_overlap());
+        assert!(
+            (cfg.nominal_overlap() - 1.5).abs() < 1e-2,
+            "overlap {}",
+            cfg.nominal_overlap()
+        );
         assert!((f64::from(cfg.window_overlap) - 1.5).abs() < 1e-2);
         assert_eq!(StftConfig::default(), StftConfig::new(2048, DEFAULT_HOP));
         assert!((cfg.frame_duration() - 2048.0 / 48_000.0).abs() < 1e-15);
@@ -350,8 +352,7 @@ mod tests {
     #[test]
     fn cola_detection() {
         // Rectangular at hop == n: every position sees exactly one frame.
-        let cfg = StftConfig::new(64, 64)
-            .with_window(Window::Rectangular);
+        let cfg = StftConfig::new(64, 64).with_window(Window::Rectangular);
         assert!(cfg.is_cola(1e-9));
         // Rectangular is COLA whenever the hop divides the window (then every
         // position sees the same number of full frames) — and not at hop 7,

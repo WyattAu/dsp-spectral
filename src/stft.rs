@@ -37,7 +37,7 @@
 //!
 //! # Example
 //!
-//! 
+//!
 //! use dsp_spectral::{istft, stft, StftConfig};
 //!
 //! let cfg = StftConfig::new(256, 64);
@@ -52,7 +52,7 @@
 //! for (a, b) in signal.iter().zip(back.iter()) {
 //!     assert!((a - b).abs() < 1e-10, "round-trip drift");
 //! }
-//! 
+//!
 
 use alloc::format;
 use alloc::string::String;
@@ -70,7 +70,7 @@ const MIN_WINDOW_WEIGHT: f64 = 1e-12;
 
 /// A short-time Fourier transform: frames rows of bins complex values.
 ///
-/// Construct one with [stft] or [Spectrum::from_parts] (the latter for
+/// Construct one with [stft] or [`Spectrum::from_parts`] (the latter for
 /// synthetic spectra — feature extraction is defined on any well-formed
 /// spectrogram). Every accessor is infallible; out-of-range indices resolve
 /// to empty slices or empty vectors rather than panics.
@@ -140,11 +140,19 @@ fn reflect_pad(samples: &[f64], pad: usize) -> Vec<f64> {
     let n = samples.len();
     let mut out = Vec::with_capacity(n + 2 * pad);
     for k in 0..pad {
-        out.push(*samples.get(mirror_index(n, -(pad as isize) + k as isize)).unwrap_or(&0.0));
+        out.push(
+            *samples
+                .get(mirror_index(n, -(pad as isize) + k as isize))
+                .unwrap_or(&0.0),
+        );
     }
     out.extend_from_slice(samples);
     for k in 0..pad {
-        out.push(*samples.get(mirror_index(n, n as isize + k as isize)).unwrap_or(&0.0));
+        out.push(
+            *samples
+                .get(mirror_index(n, n as isize + k as isize))
+                .unwrap_or(&0.0),
+        );
     }
     out
 }
@@ -169,13 +177,13 @@ fn mirror_index(n: usize, v: isize) -> usize {
 impl Spectrum {
     /// Build a spectrogram from raw complex frames.
     ///
-    /// Every frame must hold exactly fft_size / 2 + 1 bins; hop must be
-    /// > 0 and fft_size a power of two >= 2. Zero frames is legal (an
-    /// empty spectrogram) and every feature then returns an empty vector.
+    /// Every frame must hold exactly `fft_size / 2 + 1` bins, `hop` must be
+    /// positive, and `fft_size` a power of two `>= 2`. Zero frames is legal
+    /// (an empty spectrogram), and every feature on it returns an empty vector.
     ///
     /// # Errors
     ///
-    /// Returns [SpectralError::Config] on a ragged or wrong-width frame
+    /// Returns [`SpectralError::Config`] on a ragged or wrong-width frame
     /// row, a zero hop, or an unsupported transform size.
     pub fn from_parts(
         frames: Vec<Vec<Complex>>,
@@ -251,12 +259,12 @@ impl Spectrum {
         self.frames.get(i).map(Vec::as_slice)
     }
 
-    /// Frame i, or [SpectralError::FrameOutOfRange] when i >=
+    /// Frame i, or [`SpectralError::FrameOutOfRange`] when i >=
     /// num_frames.
     ///
     /// # Errors
     ///
-    /// Returns [SpectralError::FrameOutOfRange] carrying the offending
+    /// Returns [`SpectralError::FrameOutOfRange`] carrying the offending
     /// index.
     pub fn frame_checked(&self, i: usize) -> Result<&[Complex], SpectralError> {
         self.frames
@@ -296,14 +304,14 @@ impl Spectrum {
     }
 
     /// Magnitude spectrum of frame frame in decibels, 20·log10(|X[k]|)
-    /// with a documented floor: a zero bin reads [POWER_FLOOR_DB].
+    /// with a documented floor: a zero bin reads [`POWER_FLOOR_DB`].
     #[must_use]
     pub fn magnitude_db(&self, frame: usize) -> Vec<f64> {
         linear_to_db_floored(&self.magnitude(frame))
     }
 
     /// Power spectrum of frame frame in decibels, 10·log10(|X[k]|²) with
-    /// the same [POWER_FLOOR_DB] floor as [magnitude_db](Self::magnitude_db).
+    /// the same [`POWER_FLOOR_DB`] floor as [magnitude_db](Self::magnitude_db).
     #[must_use]
     pub fn power_db(&self, frame: usize) -> Vec<f64> {
         self.magnitude_db(frame)
@@ -320,7 +328,7 @@ impl Spectrum {
     /// f_min >= f_max) yield a bank with no filters, whose
     /// [energies](MelBank::energies) are empty — callers that need the
     /// argument validated should build the bank with
-    /// [MelBank::new], which reports those as [SpectralError::Config].
+    /// [`MelBank::new`], which reports those as [`SpectralError::Config`].
     #[must_use]
     pub fn mel_filterbank(
         &self,
@@ -387,13 +395,13 @@ fn linear_to_db_floored(values: &[f64]) -> Vec<f64> {
 ///
 /// # Errors
 ///
-/// Returns [SpectralError::Config] when cfg fails
-/// [StftConfig::validate], [SpectralError::EmptyInput] for an empty
-/// samples, and [SpectralError::NonFinite] if any sample is NaN or ±∞.
+/// Returns [`SpectralError::Config`] when cfg fails
+/// [`StftConfig::validate`], [`SpectralError::EmptyInput`] for an empty
+/// samples, and [`SpectralError::NonFinite`] if any sample is NaN or ±∞.
 ///
 /// # Example
 ///
-/// 
+///
 /// use dsp_spectral::{Spectrum, stft, StftConfig};
 ///
 /// let cfg = StftConfig::new(16, 8);
@@ -408,7 +416,7 @@ fn linear_to_db_floored(values: &[f64]) -> Vec<f64> {
 ///     Err(dsp_spectral::SpectralError::FrameOutOfRange(999))
 /// ));
 /// let _ = Spectrum::bin_count(&spec);
-/// 
+///
 pub fn stft(samples: &[f64], cfg: &StftConfig) -> Result<Spectrum, SpectralError> {
     cfg.validate()?;
     if samples.is_empty() {
@@ -510,12 +518,14 @@ pub fn istft(spec: &Spectrum, original_len: usize) -> Vec<f64> {
                 frame.get(k).map_or((0.0, 0.0), |c| (c.re, c.im))
             } else {
                 let mirrored = n - k;
-                match (mirrored, frame.get(mirrored)) {
-                    // mirrored == 0 would mean k == n, which cannot happen.
-                    (0, _) | (_, None) => (0.0, 0.0),
-                    // DC and Nyquist are their own mirrors and are real.
-                    (m, Some(c)) if m == 0 => (c.re, 0.0),
-                    (_, Some(c)) => (c.re, -c.im),
+                // For k in `bins..n` the mirrored index runs `n/2-1` down to
+                // 1: DC (k = n) is unreachable and Nyquist (k = n/2) already
+                // took the `k < bins` branch, so every value here is a true
+                // interior conjugate mirror and needs only its imaginary part
+                // negated.
+                match frame.get(mirrored) {
+                    Some(c) => (c.re, -c.im),
+                    None => (0.0, 0.0),
                 }
             };
             if let [a, b] = chunk {
@@ -570,9 +580,8 @@ pub fn istft(spec: &Spectrum, original_len: usize) -> Vec<f64> {
 ///
 /// # Errors
 ///
-/// Returns [SpectralError::Config] when factor is not finite and
+/// Returns [`SpectralError::Config`] when `factor` is not finite and
 /// positive, or when the implied hop would round to zero.
-#[must_use]
 pub fn resample_frames(spec: &Spectrum, factor: f64) -> Result<Spectrum, SpectralError> {
     if !factor.is_finite() || factor <= 0.0 {
         return Err(SpectralError::Config(String::from(
@@ -597,7 +606,7 @@ pub fn resample_frames(spec: &Spectrum, factor: f64) -> Result<Spectrum, Spectra
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
-    use super::{Spectrum, frame_layout, istft, mirror_index, reflect_pad, resample_frames, stft};
+    use super::{frame_layout, istft, mirror_index, reflect_pad, resample_frames, stft, Spectrum};
     use crate::complex::Complex;
     use crate::config::StftConfig;
     use crate::error::SpectralError;
@@ -609,7 +618,9 @@ mod tests {
     fn lcg(seed: u64) -> impl FnMut() -> f64 {
         let mut state = seed | 1;
         move || {
-            state = state.wrapping_mul(6_364_136_223_845_793_005).wrapping_add(1_442_695_040_888_963_407);
+            state = state
+                .wrapping_mul(6_364_136_223_845_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
             ((state >> 11) as f64 / (1u64 << 53) as f64) * 2.0 - 1.0
         }
     }
@@ -627,17 +638,23 @@ mod tests {
     #[test]
     fn reflect_padding_layout() {
         let x = [1.0, 2.0, 3.0, 4.0, 5.0];
-        assert_eq!(reflect_pad(&x, 2), vec![3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0, 4.0, 3.0]);
+        assert_eq!(
+            reflect_pad(&x, 2),
+            vec![3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0, 4.0, 3.0]
+        );
         // Long pads fold repeatedly; a single sample repeats.
         // A pad longer than the signal folds back through it: 7 taps of
         // reflection over a 5-sample signal repeats the 8-sample period.
         let long = reflect_pad(&x, 7);
         assert_eq!(long.len(), 5 + 14);
-        assert_eq!(long, vec![
-            2.0, 3.0, 4.0, 5.0, 4.0, 3.0, 2.0, // left fold
-            1.0, 2.0, 3.0, 4.0, 5.0,           // signal
-            4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, // right fold
-        ]);
+        assert_eq!(
+            long,
+            vec![
+                2.0, 3.0, 4.0, 5.0, 4.0, 3.0, 2.0, // left fold
+                1.0, 2.0, 3.0, 4.0, 5.0, // signal
+                4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, // right fold
+            ]
+        );
         assert_eq!(reflect_pad(&[9.0], 3), vec![9.0; 7]);
         assert_eq!(reflect_pad(&x, 0), x.to_vec());
         // The virtual index mapping: identity inside, reflect outside.
@@ -658,10 +675,7 @@ mod tests {
     #[test]
     fn empty_and_short_paths() {
         let cfg = StftConfig::new(64, 16);
-        assert!(matches!(
-            stft(&[], &cfg),
-            Err(SpectralError::EmptyInput)
-        ));
+        assert!(matches!(stft(&[], &cfg), Err(SpectralError::EmptyInput)));
         assert!(matches!(
             stft(&[f64::NAN], &cfg),
             Err(SpectralError::NonFinite)
@@ -740,10 +754,12 @@ mod tests {
     fn from_parts_validates() {
         let bins = vec![Complex::ZERO; 5];
         assert!(Spectrum::from_parts(vec![], 1, 8, Window::Hann, true).is_ok());
-        assert!(Spectrum::from_parts(vec![], 1, 8, Window::Hann, true)
-            .unwrap()
-            .num_frames()
-            == 0);
+        assert!(
+            Spectrum::from_parts(vec![], 1, 8, Window::Hann, true)
+                .unwrap()
+                .num_frames()
+                == 0
+        );
         assert!(matches!(
             Spectrum::from_parts(vec![], 0, 8, Window::Hann, true),
             Err(SpectralError::Config(_))
@@ -845,7 +861,10 @@ mod tests {
         let w = Window::Hann.coefficients(n);
         let coherent: f64 = w.iter().sum::<f64>() / (n as f64);
         let exact = ((n - 1) as f64) / (2.0 * (n as f64));
-        assert!((coherent - exact).abs() < 1e-12, "Hann coherent gain {coherent}");
+        assert!(
+            (coherent - exact).abs() < 1e-12,
+            "Hann coherent gain {coherent}"
+        );
         let expect = (n as f64 / 2.0) * coherent;
         // The window's phase response is not perfectly flat across the
         // frame, so the peak sits a few ppm under the ideal.

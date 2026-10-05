@@ -1,4 +1,9 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, missing_docs)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    missing_docs
+)]
 //! Every feature against a naive reference implementation.
 //!
 //! Each test here recomputes the descriptor with the most obvious possible
@@ -11,8 +16,8 @@
 use core::f64::consts::PI;
 
 use dsp_spectral::{
-    Complex, Spectrum, StftConfig, Window, spectral_bandwidth, spectral_centroid, spectral_flatness,
-    spectral_flux, spectral_rolloff, stft, zero_crossing_rate,
+    spectral_bandwidth, spectral_centroid, spectral_flatness, spectral_flux, spectral_rolloff,
+    stft, zero_crossing_rate, Complex, Spectrum, StftConfig, Window,
 };
 
 /// Naive magnitude spectrogram: `|X_k|` from the stored bins.
@@ -123,13 +128,20 @@ fn random_spectrum(bins: usize, frames: usize, seed: u64) -> Spectrum {
 
 #[test]
 fn centroid_matches_reference_on_random_spectra() {
-    for (bins, frames, fs) in [(5usize, 7usize, 8_000.0f64), (17, 9, 44_100.0), (33, 4, 48_000.0)] {
+    for (bins, frames, fs) in [
+        (5usize, 7usize, 8_000.0f64),
+        (17, 9, 44_100.0),
+        (33, 4, 48_000.0),
+    ] {
         let spec = random_spectrum(bins, frames, 0xCE1);
         let got = spectral_centroid(&spec, fs);
         assert_eq!(got.len(), frames);
-        for f in 0..frames {
+        for (f, &actual) in got.iter().enumerate() {
             let want = ref_centroid(&mags(&spec, f), fs, (bins - 1) * 2);
-            assert!((got[f] - want).abs() < 1e-9, "frame {f}: {} vs {want}", got[f]);
+            assert!(
+                (actual - want).abs() < 1e-9,
+                "frame {f}: {actual} vs {want}"
+            );
         }
     }
 }
@@ -142,15 +154,16 @@ fn bandwidth_matches_reference_on_random_spectra() {
         let spec = random_spectrum(bins, frames, 0xB0D);
         let centroids = spectral_centroid(&spec, fs);
         let got = spectral_bandwidth(&spec, fs, &centroids);
-        for f in 0..frames {
-            let row = mags(&spec, f);
-            let want = ref_bandwidth(&row, ref_centroid(&row, fs, fft), fs, fft);
-            assert!((got[f] - want).abs() < 1e-9, "frame {f}: {} vs {want}", got[f]);
-        }
         // Ignoring the supplied centroid must give the same answer.
         let recomputed = spectral_bandwidth(&spec, fs, &[]);
-        for f in 0..frames {
-            assert!((got[f] - recomputed[f]).abs() < 1e-9);
+        for (f, &actual) in got.iter().enumerate() {
+            let row = mags(&spec, f);
+            let want = ref_bandwidth(&row, ref_centroid(&row, fs, fft), fs, fft);
+            assert!(
+                (actual - want).abs() < 1e-9,
+                "frame {f}: {actual} vs {want}"
+            );
+            assert!((actual - recomputed[f]).abs() < 1e-9);
         }
     }
 }
@@ -160,9 +173,12 @@ fn flatness_matches_reference_on_random_spectra() {
     for (bins, frames) in [(5usize, 8usize), (9, 5), (65, 3)] {
         let spec = random_spectrum(bins, frames, 0x71A);
         let got = spectral_flatness(&spec);
-        for f in 0..frames {
+        for (f, &actual) in got.iter().enumerate() {
             let want = ref_flatness(&mags(&spec, f));
-            assert!((got[f] - want).abs() < 1e-9, "frame {f}: {} vs {want}", got[f]);
+            assert!(
+                (actual - want).abs() < 1e-9,
+                "frame {f}: {actual} vs {want}"
+            );
         }
     }
 }
@@ -173,12 +189,11 @@ fn rolloff_matches_reference_on_random_spectra() {
     for threshold in [0.1f64, 0.5, 0.85, 0.95, 0.99] {
         let spec = random_spectrum(17, 6, 0x201);
         let got = spectral_rolloff(&spec, threshold, fs);
-        for f in 0..6 {
+        for (f, &actual) in got.iter().enumerate() {
             let want = ref_rolloff(&mags(&spec, f), threshold, fs, 32);
             assert!(
-                (got[f] - want).abs() < 1e-9,
-                "threshold {threshold} frame {f}: {} vs {want}",
-                got[f]
+                (actual - want).abs() < 1e-9,
+                "threshold {threshold} frame {f}: {actual} vs {want}"
             );
         }
     }
@@ -189,9 +204,12 @@ fn flux_matches_reference_on_random_spectra() {
     let spec = random_spectrum(9, 10, 0xF10);
     let got = spectral_flux(&spec);
     assert_eq!(got[0], 0.0, "the first frame has no predecessor");
-    for f in 1..10 {
+    for (f, &actual) in got.iter().enumerate().skip(1) {
         let want = ref_flux(&mags(&spec, f - 1), &mags(&spec, f));
-        assert!((got[f] - want).abs() < 1e-9, "frame {f}: {} vs {want}", got[f]);
+        assert!(
+            (actual - want).abs() < 1e-9,
+            "frame {f}: {actual} vs {want}"
+        );
     }
 }
 
@@ -232,9 +250,13 @@ fn constant_amplitude_signal_reads_as_pure_dc() {
     let spec = stft(&[1.0; 256], &cfg).expect("valid");
     let c = spectral_centroid(&spec, cfg.sample_rate);
     assert!(c.iter().all(|v| v.abs() < 1e-9), "constant signal: {c:?}");
-    assert!(spectral_bandwidth(&spec, cfg.sample_rate, &c).iter().all(|v| *v < 1e-9));
+    assert!(spectral_bandwidth(&spec, cfg.sample_rate, &c)
+        .iter()
+        .all(|v| *v < 1e-9));
     assert!(spectral_flatness(&spec).iter().all(|v| *v < 1e-3));
-    assert!(spectral_rolloff(&spec, 0.95, cfg.sample_rate).iter().all(|v| *v < 1e-9));
+    assert!(spectral_rolloff(&spec, 0.95, cfg.sample_rate)
+        .iter()
+        .all(|v| *v < 1e-9));
     assert!(spectral_flux(&spec).iter().all(|v| *v == 0.0));
 
     // A *tapered* window on a constant signal is a different question: the
@@ -256,9 +278,7 @@ fn uniform_magnitude_spectrum_reads_flatness_one() {
     // weighs the same. This is the "flatness ≈ 1" case — it is a property of
     // the *spectrogram*, not of any particular input signal.
     let uniform = Spectrum::from_parts(
-        (0..3)
-            .map(|_| vec![Complex::new(1.0, 0.0); 9])
-            .collect(),
+        (0..3).map(|_| vec![Complex::new(1.0, 0.0); 9]).collect(),
         1,
         16,
         Window::Hann,
@@ -266,7 +286,9 @@ fn uniform_magnitude_spectrum_reads_flatness_one() {
     )
     .expect("valid");
     assert!((spectral_flatness(&uniform)[0] - 1.0).abs() < 1e-12);
-    assert!(spectral_flatness(&uniform).iter().all(|v| (*v - 1.0).abs() < 1e-12));
+    assert!(spectral_flatness(&uniform)
+        .iter()
+        .all(|v| (*v - 1.0).abs() < 1e-12));
     // fft_size 16 → 9 bins, bin 4 is the mid-band centre at 8 kHz.
     let mid = spectral_centroid(&uniform, 8_000.0)[0];
     assert!((mid - 2_000.0).abs() < 1e-9, "mid {mid}");
@@ -316,7 +338,10 @@ fn white_noise_reads_low_flatness_and_mid_band_centroid() {
     let tone_flat = spectral_flatness(&stft(&tone, &cfg).expect("valid"));
     let tone_mean: f64 = tone_flat.iter().sum::<f64>() / (tone_flat.len() as f64);
     assert!(tone_mean < 0.01, "tone flatness {tone_mean}");
-    assert!(mean_f > 100.0 * tone_mean, "noise {mean_f} vs tone {tone_mean}");
+    assert!(
+        mean_f > 100.0 * tone_mean,
+        "noise {mean_f} vs tone {tone_mean}"
+    );
     // A pure tone's centroid tracks its frequency.
     let tone_c: f64 = spectral_centroid(&stft(&tone, &cfg).expect("valid"), fs)
         .iter()
@@ -362,7 +387,10 @@ fn stationary_signal_has_near_zero_flux_and_onset_spikes() {
     assert!(peak > 1.0, "onset flux {peak}");
     // Exactly one frame dominates: the onset.
     let peak_frames = flux.iter().filter(|f| **f > 0.5 * peak).count();
-    assert!(peak_frames <= 4, "{peak_frames} frames near the peak: {flux:?}");
+    assert!(
+        peak_frames <= 4,
+        "{peak_frames} frames near the peak: {flux:?}"
+    );
 }
 
 #[test]
@@ -383,7 +411,9 @@ fn zero_crossing_rate_matches_its_definition() {
     assert!((zero_crossing_rate(&x) - want).abs() < 1e-15);
 
     // A Nyquist-rate square wave crosses at every sample pair.
-    let square: Vec<f64> = (0..1024).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect();
+    let square: Vec<f64> = (0..1024)
+        .map(|i| if i % 2 == 0 { 1.0 } else { -1.0 })
+        .collect();
     assert!((zero_crossing_rate(&square) - 1.0).abs() < 1e-15);
 
     // And the feature tracks the actual rate: a 1 kHz sine at 16 kHz has
