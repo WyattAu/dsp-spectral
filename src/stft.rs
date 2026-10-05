@@ -1,30 +1,30 @@
 //! Short-time Fourier transform and its inverse.
 //!
-//! [stft] frames a signal, windows it, and transforms each frame with the
-//! radix-2 FFT owned by dsp-core (L0), keeping the fft_size / 2 + 1
-//! useful bins of every frame. [istft] reverses it: hermitian-symmetric
+//! [`stft`] frames a signal, windows it, and transforms each frame with the
+//! radix-2 FFT owned by [`dsp_core`] (L0), keeping the `fft_size / 2 + 1`
+//! useful bins of every frame. [`istft`] reverses it: hermitian-symmetric
 //! spectrum expansion, inverse FFT, re-window, and overlap-add divided by the
 //! **measured** squared-window weight at each output sample.
 //!
 //! # Why measured normalisation
 //!
-//! Classic STFT inversion divides by the constant Σ_k w[k·hop]². That is
+//! Classic STFT inversion divides by the constant `sum_k w[k*hop]^2`. That is
 //! only correct where the overlap is genuinely constant, and it cannot
 //! represent the two places where it is not: the first and last samples of
 //! the signal (fewer overlapping frames) and any window whose end taps are
-//! zero (Hann, Blackman). Measuring Σ_k w[k·hop]² per output sample instead
+//! zero (Hann, Blackman). Measuring `sum_k w[k*hop]^2` per output sample instead
 //! costs one extra accumulator and makes the inverse exact for **any**
-//! window and hop — which is what lets the round-trip test assert 1e-10
+//! window and hop — which is what lets the round-trip test assert 1e-15
 //! rather than "roughly right".
 //!
 //! # Centre padding
 //!
-//! With center = true the signal is reflected by fft_size / 2 on both
+//! With `center = true` the signal is reflected by `fft_size / 2` on both
 //! sides before framing, so frame 0 is centred on sample 0 and the
 //! output region is always fully covered by frames with non-negligible taps.
-//! istft then drops those fft_size / 2 samples again. The net effect is
-//! istft(stft(x), x.len()) == x for every supported window. With
-//! center = false the first and last samples are only recoverable when the
+//! [`istft`] then drops those `fft_size / 2` samples again. The net effect is
+//! `istft(stft(x), x.len()) == x` for every supported window. With
+//! `center = false` the first and last samples are only recoverable when the
 //! window's end taps are non-zero (rectangular, Hamming, Blackman–Harris,
 //! flat top) — a window that tapers to zero has thrown that energy away.
 //!
@@ -32,12 +32,12 @@
 //!
 //! | Layout | Frames |
 //! |---|---|
-//! | center = true | 1 + len / hop (integer division) |
-//! | center = false | (len - fft_size) / hop + 1, or 0 when len < fft_size |
-//!
+//! | `center = true` | `1 + len / hop` (integer division) |
+//! | `center = false` | `(len - fft_size) / hop + 1`, or `0` when `len < fft_size` |
+//! |
 //! # Example
 //!
-//!
+//! ```rust
 //! use dsp_spectral::{istft, stft, StftConfig};
 //!
 //! let cfg = StftConfig::new(256, 64);
@@ -50,9 +50,9 @@
 //!
 //! let back = istft(&spec, signal.len());
 //! for (a, b) in signal.iter().zip(back.iter()) {
-//!     assert!((a - b).abs() < 1e-10, "round-trip drift");
+//!     assert!((a - b).abs() < 1e-12, "round-trip drift");
 //! }
-//!
+//! ```
 
 use alloc::format;
 use alloc::string::String;
@@ -65,12 +65,12 @@ use crate::error::SpectralError;
 use crate::window::Window;
 
 /// Below this accumulated squared-window weight an output sample has no
-/// usable signal energy (a Hann end tap) and is emitted as exact zero.
+/// usable signal energy (a Hann end tap) and is emitted as an exact zero.
 const MIN_WINDOW_WEIGHT: f64 = 1e-12;
 
-/// A short-time Fourier transform: frames rows of bins complex values.
+/// A short-time Fourier transform: `frames` rows of `bins` complex values.
 ///
-/// Construct one with [stft] or [`Spectrum::from_parts`] (the latter for
+/// Construct one with [`stft`] or [`Spectrum::from_parts`] (the latter for
 /// synthetic spectra — feature extraction is defined on any well-formed
 /// spectrogram). Every accessor is infallible; out-of-range indices resolve
 /// to empty slices or empty vectors rather than panics.
@@ -87,7 +87,7 @@ pub struct Spectrum {
 impl Default for Spectrum {
     /// The smallest *valid* spectrogram: no frames, 2-point transform, unit
     /// hop, Hann window, centred. Every feature on it returns an empty vector
-    /// and [istft](istft) returns silence — which is the right answer for
+    /// and [`istft`] returns silence — which is the right answer for
     /// "no analysis was performed".
     fn default() -> Self {
         Self {
@@ -116,9 +116,9 @@ impl core::fmt::Debug for Spectrum {
 
 /// Where the signal starts inside the padded buffer, and how many frames fit.
 ///
-/// center = true pads by fft_size / 2 on both sides (pad) and emits
-/// 1 + len / hop frames; center = false pads nothing and emits
-/// (len - fft_size) / hop + 1 frames.
+/// `center = true` pads by `fft_size / 2` on both sides (`pad`) and emits
+/// `1 + len / hop` frames; `center = false` pads nothing and emits
+/// `(len - fft_size) / hop + 1` frames.
 fn frame_layout(len: usize, cfg: &StftConfig) -> (usize, usize) {
     let n = cfg.fft_size;
     if cfg.center {
@@ -130,12 +130,12 @@ fn frame_layout(len: usize, cfg: &StftConfig) -> (usize, usize) {
     }
 }
 
-/// Reflect-pad samples by pad on both sides (nearest-sample first, the
+/// Reflect-pad `samples` by `pad` on both sides (nearest-sample first, the
 /// "reflect 101" convention: the edge sample is never repeated, so padding
-/// 1,2,3,4,5 by 2 gives 3,2,1,2,3,4,5,4,3).
+/// `1, 2, 3, 4, 5` by 2 gives `3, 2, 1, 2, 3, 4, 5, 4, 3`).
 ///
 /// Pads longer than the signal fold back and forth through it, so a signal
-/// shorter than fft_size still gets a full frame of context.
+/// shorter than `fft_size` still gets a full frame of context.
 fn reflect_pad(samples: &[f64], pad: usize) -> Vec<f64> {
     let n = samples.len();
     let mut out = Vec::with_capacity(n + 2 * pad);
@@ -157,10 +157,10 @@ fn reflect_pad(samples: &[f64], pad: usize) -> Vec<f64> {
     out
 }
 
-/// Map a virtual index (which may lie outside 0..n) onto a real sample of a
-/// length-n buffer by reflecting at both edges without repeating the edge
-/// samples ("reflect 101"). The extended sequence 0,1,…,n−1,n−2,…,1 has
-/// period 2n − 2, so anything beyond folds back through it.
+/// Map a virtual index (which may lie outside `0..n`) onto a real sample of a
+/// length-`n` buffer by reflecting at both edges without repeating the edge
+/// samples ("reflect 101"). The extended sequence `0, 1, …, n−1, n−2, …, 1`
+/// has period `2n − 2`, so anything beyond folds back through it.
 fn mirror_index(n: usize, v: isize) -> usize {
     if n <= 1 {
         return 0;
@@ -223,7 +223,7 @@ impl Spectrum {
         self.frames.len()
     }
 
-    /// Useful bins per frame, fft_size / 2 + 1 (DC through Nyquist).
+    /// Useful bins per frame, `fft_size / 2 + 1` (DC through Nyquist).
     #[must_use]
     pub fn bin_count(&self) -> usize {
         self.bins
@@ -253,14 +253,14 @@ impl Spectrum {
         self.center
     }
 
-    /// Frame i, or None when i >= num_frames.
+    /// Frame `i`, or `None` when `i >= num_frames`.
     #[must_use]
     pub fn frame(&self, i: usize) -> Option<&[Complex]> {
         self.frames.get(i).map(Vec::as_slice)
     }
 
-    /// Frame i, or [`SpectralError::FrameOutOfRange`] when i >=
-    /// num_frames.
+    /// Frame `i`, or [`SpectralError::FrameOutOfRange`] when
+    /// `i >= num_frames`.
     ///
     /// # Errors
     ///
@@ -279,8 +279,8 @@ impl Spectrum {
         &self.frames
     }
 
-    /// Linear magnitude spectrum |X[k]| of frame frame; empty when the
-    /// index is out of range.
+    /// Linear magnitude spectrum `|X[k]|` of frame `frame`; empty when
+    /// the index is out of range.
     #[must_use]
     pub fn magnitude(&self, frame: usize) -> Vec<f64> {
         self.frames
@@ -289,12 +289,12 @@ impl Spectrum {
             .unwrap_or_default()
     }
 
-    /// Linear power spectrum |X[k]|² of frame frame; empty when the index
-    /// is out of range.
+    /// Linear power spectrum `|X[k]|²` of frame `frame`; empty when the
+    /// index is out of range.
     ///
     /// **Linear, not decibels** — Parseval's identity holds exactly:
-    /// Σ_n x[n]² = (1/N)·Σ_k P[k]. Use [power_db](Self::power_db) for a
-    /// decibel view.
+    /// `sum_n x[n]^2 = (1/N) * sum_k P[k]`. Use
+    /// [`power_db`](Self::power_db) for a decibel view.
     #[must_use]
     pub fn power(&self, frame: usize) -> Vec<f64> {
         self.frames
@@ -303,15 +303,16 @@ impl Spectrum {
             .unwrap_or_default()
     }
 
-    /// Magnitude spectrum of frame frame in decibels, 20·log10(|X[k]|)
+    /// Magnitude spectrum of frame `frame` in decibels, `20 * log10(|X[k]|)`
     /// with a documented floor: a zero bin reads [`POWER_FLOOR_DB`].
     #[must_use]
     pub fn magnitude_db(&self, frame: usize) -> Vec<f64> {
         linear_to_db_floored(&self.magnitude(frame))
     }
 
-    /// Power spectrum of frame frame in decibels, 10·log10(|X[k]|²) with
-    /// the same [`POWER_FLOOR_DB`] floor as [magnitude_db](Self::magnitude_db).
+    /// Power spectrum of frame `frame` in decibels, `10 * log10(|X[k]|^2)`,
+    /// with the same [`POWER_FLOOR_DB`] floor as
+    /// [`magnitude_db`](Self::magnitude_db).
     #[must_use]
     pub fn power_db(&self, frame: usize) -> Vec<f64> {
         self.magnitude_db(frame)
@@ -324,8 +325,8 @@ impl Spectrum {
     ///
     /// # Panics
     ///
-    /// None. Degenerate parameters (n_mels == 0, non-positive sample rate,
-    /// f_min >= f_max) yield a bank with no filters, whose
+    /// None. Degenerate parameters (`n_mels == 0`, non-positive sample rate,
+    /// `f_min >= f_max`) yield a bank with no filters, whose
     /// [energies](MelBank::energies) are empty — callers that need the
     /// argument validated should build the bank with
     /// [`MelBank::new`], which reports those as [`SpectralError::Config`].
@@ -401,22 +402,32 @@ fn linear_to_db_floored(values: &[f64]) -> Vec<f64> {
 ///
 /// # Example
 ///
-///
-/// use dsp_spectral::{Spectrum, stft, StftConfig};
+/// ```rust
+/// use dsp_spectral::{Spectrum, Window, stft, StftConfig};
 ///
 /// let cfg = StftConfig::new(16, 8);
 /// let spec = stft(&[1.0; 32], &cfg).expect("valid");
-/// // A DC signal puts all its energy in bin 0 and nothing in the others.
+/// assert_eq!(spec.num_frames(), 1 + 32 / 8);
+/// assert_eq!(spec.bin_count(), 9);
+///
+/// // A DC signal windowed by a Hann sums to the window's own area, which
+/// // lands in bin 0; the rest is the window's own spectral skirt — at this
+/// // transform size it has not yet fallen far, which is exactly why a
+/// // frequency-domain claim needs a stated transform length.
 /// let mag = spec.magnitude(0);
-/// assert!(mag[0] > 15.0);
-/// assert!(mag[1..].iter().all(|m| *m < 1e-9));
+/// let area: f64 = Window::Hann.coefficients(16).iter().sum();
+/// assert!((mag[0] - area).abs() < 1e-9, "{} vs {area}", mag[0]);
+/// assert!(mag.iter().all(|m| *m <= mag[0] + 1e-12));
+///
+/// // Out-of-range frame access is empty, or a typed error when asked for
+/// // the index back.
 /// assert_eq!(spec.frame(999), None);
 /// assert!(matches!(
 ///     spec.frame_checked(999),
 ///     Err(dsp_spectral::SpectralError::FrameOutOfRange(999))
 /// ));
 /// let _ = Spectrum::bin_count(&spec);
-///
+/// ```
 pub fn stft(samples: &[f64], cfg: &StftConfig) -> Result<Spectrum, SpectralError> {
     cfg.validate()?;
     if samples.is_empty() {
@@ -495,10 +506,10 @@ pub fn istft(spec: &Spectrum, original_len: usize) -> Vec<f64> {
     let total = core::cmp::max(covered, needed);
 
     let window = spec.window.coefficients(n);
-    let fft = match Fft::new(n) {
-        Ok(fft) => fft,
-        // Unreachable: fft_size was validated when the spectrum was built.
-        Err(_) => return alloc::vec![0.0; original_len],
+    // Unreachable in practice: `fft_size` was validated when the spectrum was
+    // built. Handled rather than unwrapped so the function stays total.
+    let Ok(fft) = Fft::new(n) else {
+        return alloc::vec![0.0; original_len];
     };
 
     let mut acc = alloc::vec![0.0f64; total];
@@ -575,8 +586,9 @@ pub fn istft(spec: &Spectrum, original_len: usize) -> Vec<f64> {
 /// result is an OLA approximation rather than a resampled waveform.
 ///
 /// A subsequent [istft] on the returned spectrogram yields
-/// ≈ (num_frames - 1)·hop' + fft_size - fft_size/2 samples, i.e. roughly
-/// original_len · factor when the spectrogram came from a centred STFT.
+/// `≈ (num_frames - 1) * hop' + fft_size - fft_size / 2` samples, i.e.
+/// roughly `original_len * factor` when the spectrogram came from a
+/// centred STFT.
 ///
 /// # Errors
 ///

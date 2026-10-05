@@ -70,7 +70,7 @@ pub fn mel_frequencies(n_mels: usize, f_min: f64, f_max: f64) -> Vec<f64> {
     let lo = hz_to_mel(f_min);
     let hi = hz_to_mel(f_max);
     if n_mels == 1 {
-        return alloc::vec![mel_to_hz((lo + hi) / 2.0)];
+        return alloc::vec![mel_to_hz(f64::midpoint(lo, hi))];
     }
     let span = hi - lo;
     let denom = (n_mels - 1) as f64;
@@ -296,7 +296,7 @@ impl MelBank {
         }
         if count > 0 {
             let n = count as f64;
-            for slot in total.iter_mut() {
+            for slot in &mut total {
                 *slot /= n;
             }
         }

@@ -1,0 +1,7 @@
+
+# cargo-vet audits file
+
+[[audits.dsp-spectral]]
+criteria = "safe-to-deploy"
+version = "0.1.0"
+notes = "WyattAu estate first-party L1 crate (audio DSP primitives); reviewed as the original in-tree implementation."

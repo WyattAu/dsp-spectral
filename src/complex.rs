@@ -169,7 +169,7 @@ mod tests {
         assert!((z.magnitude() - 5.0).abs() < 1e-15);
         assert!((z.power() - 25.0).abs() < 1e-13);
         // arg(3 + 4i) = atan(4/3) = 0.9272952180016122 rad.
-        assert!((z.phase() - 0.9272952180016122).abs() < 1e-12);
+        assert!((z.phase() - 0.927_295_218_001_612_2).abs() < 1e-12);
         let polar = Complex::from_polar(z.magnitude(), z.phase());
         assert!((polar.re - 3.0).abs() < 1e-14 && (polar.im - 4.0).abs() < 1e-14);
         // Negative real axis: phase is ±π, magnitude positive.

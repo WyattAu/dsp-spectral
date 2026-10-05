@@ -97,7 +97,7 @@ impl NoiseProfile {
         }
         if used > 0 {
             let n = used as f64;
-            for slot in spectrum.iter_mut() {
+            for slot in &mut spectrum {
                 *slot /= n;
             }
         }
@@ -435,14 +435,19 @@ fn median_in_place(buf: &mut [f64]) -> f64 {
     buf.sort_by(f64::total_cmp);
     let mid = buf.len() / 2;
     if buf.len() % 2 == 0 {
-        // Even window: average the two central order statistics.
+        // Even window: average the two central order statistics. `midpoint`
+        // rather than `0.5 * (lo + hi)`, which can overflow on large inputs.
         let lo = buf.get(mid.saturating_sub(1)).copied().unwrap_or(0.0);
         let hi = buf.get(mid).copied().unwrap_or(0.0);
-        0.5 * (lo + hi)
+        f64::midpoint(lo, hi)
     } else {
         buf.get(mid).copied().unwrap_or(0.0)
     }
 }
+
+/// A small absolute floor that keeps the HPSS mask well-defined on silent
+/// frames (`0/0` would be NaN) without materially affecting real ones.
+const HPSS_EPS: f64 = 1e-20;
 
 /// Median filter `values` along `axis`, window half-width `half`.
 fn median_filter(values: &[Vec<f64>], axis_time: bool, half: usize) -> Vec<Vec<f64>> {
@@ -567,10 +572,6 @@ pub fn harmonic_percussive_split(spec: &Spectrum, hps_ratio: f64) -> (Spectrum, 
     let mags: Vec<Vec<f64>> = (0..spec.num_frames()).map(|t| spec.magnitude(t)).collect();
     let h_est = median_filter(&mags, true, half);
     let p_est = median_filter(&mags, false, half);
-    // A small absolute floor keeps the mask well-defined on silent frames
-    // (0/0 would be NaN) without materially affecting real ones.
-    const EPS: f64 = 1e-20;
-
     let mut harm = Vec::with_capacity(spec.num_frames());
     let mut perc = Vec::with_capacity(spec.num_frames());
     for t in 0..spec.num_frames() {
@@ -584,7 +585,7 @@ pub fn harmonic_percussive_split(spec: &Spectrum, hps_ratio: f64) -> (Spectrum, 
         for (k, c) in bins.iter().enumerate() {
             let h = h_est.get(t).and_then(|r| r.get(k)).copied().unwrap_or(0.0);
             let p = p_est.get(t).and_then(|r| r.get(k)).copied().unwrap_or(0.0);
-            let denom = h * h + p * p + EPS;
+            let denom = h * h + p * p + HPSS_EPS;
             let mask_h = (h * h / denom).clamp(0.0, 1.0);
             h_row.push(*c * mask_h);
             p_row.push(*c * (1.0 - mask_h));
