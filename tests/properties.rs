@@ -154,7 +154,12 @@ proptest! {
 
     /// Flatness is a ratio of means, so it is always in [0, 1] for a
     /// non-negative spectrum — including spectra with exact zeros.
+    ///
+    /// Raised to 300 cases: this is a pure arithmetic invariant over random
+    /// non-negative rows, so more cases buy real coverage of the degenerate
+    /// shapes (all-zero rows, single bins) that the boundary lives on.
     #[test]
+    #[proptest_config(ProptestConfig { cases: 300, ..ProptestConfig::default() })]
     fn prop_flatness_is_bounded(
         rows in prop::collection::vec(
             prop::collection::vec(0.0f64..1.0e3, 1..64),
@@ -185,8 +190,10 @@ proptest! {
     }
 
     /// The centroid is a weighted mean of bin frequencies, so it is bounded by
-    /// the Nyquist frequency — and non-negative.
+    /// the Nyquist frequency — and non-negative. Raised to 300 cases for the
+    /// same reason as the flatness invariant above.
     #[test]
+    #[proptest_config(ProptestConfig { cases: 300, ..ProptestConfig::default() })]
     fn prop_centroid_is_within_the_band(
         rows in prop::collection::vec(
             prop::collection::vec(0.0f64..1.0e3, 1..64),
