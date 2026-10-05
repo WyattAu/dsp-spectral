@@ -152,94 +152,6 @@ proptest! {
         );
     }
 
-    /// Flatness is a ratio of means, so it is always in [0, 1] for a
-    /// non-negative spectrum — including spectra with exact zeros.
-    ///
-    /// Raised to 300 cases: this is a pure arithmetic invariant over random
-    /// non-negative rows, so more cases buy real coverage of the degenerate
-    /// shapes (all-zero rows, single bins) that the boundary lives on.
-    #[test]
-    #[proptest_config(ProptestConfig { cases: 300, ..ProptestConfig::default() })]
-    fn prop_flatness_is_bounded(
-        rows in prop::collection::vec(
-            prop::collection::vec(0.0f64..1.0e3, 1..64),
-            1..12,
-        ),
-    ) {
-        let bins = rows.first().map_or(1, Vec::len);
-        let fft_size = (bins - 1).next_power_of_two().max(2);
-        let spec = Spectrum::from_parts(
-            rows.iter()
-                .map(|row| {
-                    (0..fft_size / 2 + 1)
-                        .map(|k| Complex::new(row.get(k).copied().unwrap_or(0.0), 0.0))
-                        .collect()
-                })
-                .collect(),
-            1,
-            fft_size,
-            Window::Hann,
-            true,
-        ).expect("generated spectrum is valid");
-        let flatness = spectral_flatness(&spec);
-        prop_assert_eq!(flatness.len(), spec.num_frames());
-        for f in flatness {
-            prop_assert!(f.is_finite(), "flatness {f}");
-            prop_assert!((0.0..=1.0).contains(&f), "flatness {f} out of [0, 1]");
-        }
-    }
-
-    /// The centroid is a weighted mean of bin frequencies, so it is bounded by
-    /// the Nyquist frequency — and non-negative. Raised to 300 cases for the
-    /// same reason as the flatness invariant above.
-    #[test]
-    #[proptest_config(ProptestConfig { cases: 300, ..ProptestConfig::default() })]
-    fn prop_centroid_is_within_the_band(
-        rows in prop::collection::vec(
-            prop::collection::vec(0.0f64..1.0e3, 1..64),
-            1..12,
-        ),
-        sample_rate in 1.0f64..192_000.0,
-    ) {
-        let bins = rows.first().map_or(1, Vec::len);
-        let fft_size = (bins - 1).next_power_of_two().max(2);
-        let spec = Spectrum::from_parts(
-            rows.iter()
-                .map(|row| {
-                    (0..fft_size / 2 + 1)
-                        .map(|k| Complex::new(row.get(k).copied().unwrap_or(0.0), 0.0))
-                        .collect()
-                })
-                .collect(),
-            1,
-            fft_size,
-            Window::Hann,
-            true,
-        ).expect("generated spectrum is valid");
-        let nyquist = sample_rate / 2.0;
-        let centroids = spectral_centroid(&spec, sample_rate);
-        prop_assert_eq!(centroids.len(), spec.num_frames());
-        for c in &centroids {
-            prop_assert!(c.is_finite(), "centroid {c}");
-            prop_assert!((0.0..=nyquist).contains(c), "centroid {c} outside 0..{nyquist}");
-        }
-        // Bandwidth is a weighted deviation, so it too is bounded by the band.
-        for b in spectral_bandwidth(&spec, sample_rate, &centroids) {
-            prop_assert!(b.is_finite(), "bandwidth {b}");
-            prop_assert!((0.0..=nyquist).contains(&b), "bandwidth {b} outside 0..{nyquist}");
-        }
-        // So is rolloff, at every threshold.
-        for threshold in [0.05f64, 0.5, 0.95] {
-            for r in spectral_rolloff(&spec, threshold, sample_rate) {
-                prop_assert!(r.is_finite(), "rolloff {r}");
-                prop_assert!((0.0..=nyquist).contains(&r), "rolloff {r} outside 0..{nyquist}");
-            }
-        }
-        // Flux is a sum of non-negative differences.
-        for f in spectral_flux(&spec) {
-            prop_assert!(f.is_finite() && f >= 0.0, "flux {f}");
-        }
-    }
 
     /// Every frame yields exactly one value from every feature, whatever the
     /// spectrum's contents.
@@ -478,4 +390,100 @@ proptest! {
             prop_assert!(!e.to_string().is_empty());
         }
     }
+}
+
+proptest! {
+    // Both of these are pure arithmetic invariants over random non-negative
+    // rows, so they get the larger case budget: the degenerate shapes the
+    // boundaries live on (all-zero rows, single-bin frames) are rare draws,
+    // and a 200-case sweep can miss them. The round-trip property stays at
+    // 200 because building its signals is far more expensive.
+    #![proptest_config(ProptestConfig { cases: 300, ..ProptestConfig::default() })]
+
+/// Flatness is a ratio of means, so it is always in [0, 1] for a
+/// non-negative spectrum — including spectra with exact zeros.
+///
+/// Raised to 300 cases: this is a pure arithmetic invariant over random
+/// non-negative rows, so more cases buy real coverage of the degenerate
+/// shapes (all-zero rows, single bins) that the boundary lives on.
+#[test]
+fn prop_flatness_is_bounded(
+    rows in prop::collection::vec(
+        prop::collection::vec(0.0f64..1.0e3, 1..64),
+        1..12,
+    ),
+) {
+    let bins = rows.first().map_or(1, Vec::len);
+    let fft_size = (bins - 1).next_power_of_two().max(2);
+    let spec = Spectrum::from_parts(
+        rows.iter()
+            .map(|row| {
+                (0..fft_size / 2 + 1)
+                    .map(|k| Complex::new(row.get(k).copied().unwrap_or(0.0), 0.0))
+                    .collect()
+            })
+            .collect(),
+        1,
+        fft_size,
+        Window::Hann,
+        true,
+    ).expect("generated spectrum is valid");
+    let flatness = spectral_flatness(&spec);
+    prop_assert_eq!(flatness.len(), spec.num_frames());
+    for f in flatness {
+        prop_assert!(f.is_finite(), "flatness {f}");
+        prop_assert!((0.0..=1.0).contains(&f), "flatness {f} out of [0, 1]");
+    }
+}
+
+/// The centroid is a weighted mean of bin frequencies, so it is bounded by
+/// the Nyquist frequency — and non-negative. Raised to 300 cases for the
+/// same reason as the flatness invariant above.
+#[test]
+fn prop_centroid_is_within_the_band(
+    rows in prop::collection::vec(
+        prop::collection::vec(0.0f64..1.0e3, 1..64),
+        1..12,
+    ),
+    sample_rate in 1.0f64..192_000.0,
+) {
+    let bins = rows.first().map_or(1, Vec::len);
+    let fft_size = (bins - 1).next_power_of_two().max(2);
+    let spec = Spectrum::from_parts(
+        rows.iter()
+            .map(|row| {
+                (0..fft_size / 2 + 1)
+                    .map(|k| Complex::new(row.get(k).copied().unwrap_or(0.0), 0.0))
+                    .collect()
+            })
+            .collect(),
+        1,
+        fft_size,
+        Window::Hann,
+        true,
+    ).expect("generated spectrum is valid");
+    let nyquist = sample_rate / 2.0;
+    let centroids = spectral_centroid(&spec, sample_rate);
+    prop_assert_eq!(centroids.len(), spec.num_frames());
+    for c in &centroids {
+        prop_assert!(c.is_finite(), "centroid {c}");
+        prop_assert!((0.0..=nyquist).contains(c), "centroid {c} outside 0..{nyquist}");
+    }
+    // Bandwidth is a weighted deviation, so it too is bounded by the band.
+    for b in spectral_bandwidth(&spec, sample_rate, &centroids) {
+        prop_assert!(b.is_finite(), "bandwidth {b}");
+        prop_assert!((0.0..=nyquist).contains(&b), "bandwidth {b} outside 0..{nyquist}");
+    }
+    // So is rolloff, at every threshold.
+    for threshold in [0.05f64, 0.5, 0.95] {
+        for r in spectral_rolloff(&spec, threshold, sample_rate) {
+            prop_assert!(r.is_finite(), "rolloff {r}");
+            prop_assert!((0.0..=nyquist).contains(&r), "rolloff {r} outside 0..{nyquist}");
+        }
+    }
+    // Flux is a sum of non-negative differences.
+    for f in spectral_flux(&spec) {
+        prop_assert!(f.is_finite() && f >= 0.0, "flux {f}");
+    }
+}
 }
