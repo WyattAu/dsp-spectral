@@ -1,0 +1,51 @@
+[package]
+name = "dsp-spectral"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+authors = ["Wyatt Au <wyatt_au@protonmail.com>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/WyattAu/dsp-spectral"
+homepage = "https://github.com/WyattAu/dsp-spectral"
+documentation = "https://docs.rs/dsp-spectral"
+description = "Spectral audio analysis and restoration — STFT/ISTFT, mel/MFCC features, spectral gating, HPSS source separation"
+readme = "README.md"
+keywords = ["audio", "dsp", "stft", "spectrogram", "no-std"]
+categories = ["multimedia::audio", "no-std", "science"]
+exclude = [".github/", "fuzz/", "supply-chain/"]
+
+# Layer model: docs/layers.md in WyattAu/engineering-standards.
+# L1 — substrate: the spectral analysis layer over dsp-core's L0 numerical
+# kernels (FFT, windows, dB conversion). L1 on L0 is the legal direction.
+[package.metadata.layers]
+tier = "L1"
+
+# dsp-core owns the radix-2 FFT, the cosine-sum windows, and dB conversion.
+# libm provides the no_std transcendentals (sin/cos/log/exp/pow/atan2) so
+# this crate stays `#![no_std]` + alloc like dsp-core, and adds no new
+# supply-chain surface (libm already ships inside dsp-core).
+[dependencies]
+dsp-core = { version = "0.1", default-features = false }
+libm = "0.2"
+
+[dev-dependencies]
+proptest = "1"
+
+[lints.rust]
+missing_docs = "deny"
+unsafe_code = "deny"
+
+# Spectral analysis consumes untrusted sample buffers (files, live capture,
+# decoded media) and must never panic: every fallible entry point returns a
+# typed SpectralError instead. The lib target holds the deny-level lints; the
+# fuzz target and the tests lift them at the file level with justification.
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+undocumented_unsafe_blocks = "deny"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
