@@ -4,3 +4,5 @@
 /fuzz/target
 Cargo.lock.bak
 proptest-regressions
+# libFuzzer's own generated corpus entries; the named seeds below are tracked.
+/fuzz/corpus/spectral_fuzz/[0-9a-f][0-9a-f]*
