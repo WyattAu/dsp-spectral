@@ -166,10 +166,9 @@ fn mirror_index(n: usize, v: isize) -> usize {
         return 0;
     }
     let period = (2 * n - 2) as isize;
-    let mut m = v.rem_euclid(period);
-    if m < 0 {
-        m += period;
-    }
+    // `rem_euclid` with a positive modulus already yields `[0, period)`, so
+    // no manual negative correction is needed here.
+    let m = v.rem_euclid(period);
     let idx = if m < n as isize { m } else { period - m };
     usize::try_from(idx).unwrap_or(0).min(n - 1)
 }

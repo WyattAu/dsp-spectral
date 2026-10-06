@@ -13,6 +13,7 @@
 
 use core::f64::consts::TAU;
 
+use dsp_spectral::stft::POWER_FLOOR_DB;
 use dsp_spectral::{istft, stft, StftConfig, Window};
 
 /// Deterministic LCG so every failure is reproducible.
@@ -205,6 +206,47 @@ fn parseval_holds_without_a_window_too() {
             "frame {f}: {time_energy} vs {freq_energy}"
         );
     }
+}
+
+#[test]
+fn decibel_views_are_the_documented_linear_conversions() {
+    // `power` is linear (Parseval holds on it), and the dB views are exactly
+    // 20·log10 and 10·log10 with the floor applied at -200 dB. Pinning the
+    // relationship catches a view silently switching scale — a 3 dB error in
+    // every threshold built on top of it.
+    let n = 256usize;
+    let cfg = StftConfig::new(n, n / 4).with_center(false);
+    let x = white(n * 4, 0xDB);
+    let spec = stft(&x, &cfg).expect("valid");
+    for f in 0..spec.num_frames() {
+        let linear = spec.magnitude(f);
+        let power = spec.power(f);
+        let mag_db = spec.magnitude_db(f);
+        let pow_db = spec.power_db(f);
+        assert_eq!(linear.len(), spec.bin_count());
+        for k in 0..spec.bin_count() {
+            let m = linear[k];
+            let p = power[k];
+            assert!((p - m * m).abs() < 1e-12 * p.max(1.0), "frame {f} bin {k}");
+            assert!((pow_db[k] - 2.0 * mag_db[k]).abs() < 1e-12);
+            if m > 1e-10 {
+                assert!(
+                    (mag_db[k] - 20.0 * m.log10()).abs() < 1e-12,
+                    "frame {f} bin {k}"
+                );
+            } else {
+                // Silence floors rather than reading -inf.
+                assert_eq!(mag_db[k], POWER_FLOOR_DB, "frame {f} bin {k}");
+                assert_eq!(pow_db[k], 2.0 * POWER_FLOOR_DB);
+            }
+        }
+    }
+    // A silent signal is entirely below the floor, so every bin floors.
+    let silent = stft(&vec![0.0; n], &cfg).expect("valid");
+    assert!(silent
+        .magnitude_db(0)
+        .iter()
+        .all(|db| *db == POWER_FLOOR_DB));
 }
 
 /// `Σ |X[k]|²` over the *full* spectrum, reconstructed from the stored
