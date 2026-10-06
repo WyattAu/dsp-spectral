@@ -6,7 +6,6 @@ rust-version = "1.85"
 authors = ["Wyatt Au <wyatt_au@protonmail.com>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/WyattAu/dsp-spectral"
-homepage = "https://github.com/WyattAu/dsp-spectral"
 documentation = "https://docs.rs/dsp-spectral"
 description = "Spectral audio analysis and restoration — STFT/ISTFT, mel/MFCC features, spectral gating, HPSS source separation"
 readme = "README.md"

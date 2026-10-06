@@ -3,9 +3,9 @@
 //!
 //! The contract under fuzz is *totality*: every public entry point resolves to
 //! a value or a typed [`SpectralError`] for any input at all — never a panic,
-//! never an allocation that grows with the input, never a silent wrong
-//! answer. Alongside that, three invariants are checked on whatever the fuzzer
-//! produces:
+//! never an allocation that grows without bound with the input, never a silent
+//! wrong answer. Alongside that, a set of invariants are checked on whatever
+//! the fuzzer produces:
 //!
 //! 1. Frames are internally consistent: every row has `fft_size/2 + 1` bins,
 //!    and `num_frames × bin_count` describes the same data as `frames()`.
@@ -13,6 +13,9 @@
 //!    `istft` returns exactly the requested length.
 //! 3. Successful analyses round-trip to f64 accuracy over the reconstructible
 //!    region, so a mutation cannot make the inverse quietly wrong.
+//! 4. The mel filterbank tiles the band, so its energies conserve the frame's
+//!    power — with the one documented exception, a single filter, which by
+//!    construction cannot tile anything.
 //!
 //! Inputs are bounded (`MAX_SAMPLES`, the transform size) so a fuzzer run
 //! cannot be turned into an OOM or an hours-long case by a single input.
@@ -21,9 +24,9 @@
 
 use dsp_spectral::{
     Complex, GateConfig, NoiseProfile, Spectrum, StftConfig, Window, denoise,
-    harmonic_percussive_split, mel_frequencies, mfcc, real_cepstrum, resample_frames, spectral_bandwidth,
-    spectral_centroid, spectral_flatness, spectral_flux, spectral_gate, spectral_rolloff,
-    spectral_smooth, spectral_subtract, stft, zero_crossing_rate,
+    harmonic_percussive_split, mel_frequencies, mfcc, real_cepstrum, resample_frames,
+    spectral_bandwidth, spectral_centroid, spectral_flatness, spectral_flux, spectral_gate,
+    spectral_rolloff, spectral_smooth, spectral_subtract, stft, zero_crossing_rate,
 };
 use libfuzzer_sys::fuzz_target;
 
@@ -63,7 +66,7 @@ fn samples_from(data: &[u8]) -> Vec<f64> {
         .collect()
 }
 
-/// A power-of-two transform size in `[2, MAX_FFT]`.
+/// A power-of-two transform size in `[2, 2^MAX_FFT_SHIFT]`.
 fn fft_from(data: &[u8]) -> usize {
     let exp = u32::from(data.first().copied().unwrap_or(1) & 0x0f).clamp(1, MAX_FFT_SHIFT);
     1usize << exp
@@ -109,8 +112,9 @@ fn valid_config(data: &[u8]) -> StftConfig {
     }
 }
 
-/// Everything the library reports must be finite (or explicitly the documented
-/// sentinels) — a NaN leaking into a feature is a wrong answer, not a panic.
+/// Everything the library reports must be finite (or explicitly one of the
+/// documented sentinels) — a NaN leaking into a feature is a wrong answer, not
+/// a panic.
 fn assert_finite(label: &str, values: &[f64], lo: f64, hi: f64) {
     for v in values {
         assert!(v.is_finite(), "{label} produced {v}");
@@ -127,11 +131,17 @@ fn check_spectrum(label: &str, spec: &Spectrum) {
     for f in 0..spec.num_frames() {
         let frame = spec.frame(f).expect("index from num_frames");
         assert_eq!(frame.len(), bins, "{label}: frame {f} width");
-        assert!(frame.iter().all(|c| c.is_finite()), "{label}: frame {f} non-finite");
+        assert!(
+            frame.iter().all(|c| c.is_finite()),
+            "{label}: frame {f} non-finite"
+        );
         assert_eq!(spec.magnitude(f).len(), bins, "{label}: magnitude {f}");
         assert_eq!(spec.power(f).len(), bins, "{label}: power {f}");
         // Out-of-range access is empty, never a panic.
-        assert!(spec.magnitude(spec.num_frames()).is_empty(), "{label}: oob magnitude");
+        assert!(
+            spec.magnitude(spec.num_frames()).is_empty(),
+            "{label}: oob magnitude"
+        );
     }
 }
 
@@ -146,17 +156,20 @@ fn reconstructible(spec: &Spectrum, config: &StftConfig, len: usize) -> std::ops
     };
     let mut weight = vec![0.0f64; len];
     for f in 0..spec.num_frames() {
-        for j in 0..config.fft_size {
+        for (j, &tap) in taps.iter().enumerate() {
             if let Some(out_idx) = (f * spec.hop() + j).checked_sub(pad) {
                 if out_idx < len {
-                    weight[out_idx] += taps[j] * taps[j];
+                    weight[out_idx] += tap * tap;
                 }
             }
         }
     }
     let usable = |i: usize| weight[i] > MIN_WEIGHT;
     let start = (0..len).find(|i| usable(*i)).unwrap_or(len);
-    let end = (start..len).rev().find(|i| usable(*i)).map_or(start, |i| i + 1);
+    let end = (start..len)
+        .rev()
+        .find(|i| usable(*i))
+        .map_or(start, |i| i + 1);
     start..end
 }
 
@@ -172,8 +185,7 @@ fuzz_target!(|data: &[u8]| {
     }
 
     // ---- Valid config: run the whole pipeline. ----
-    let built = valid_config(data);
-    let cfg = built;
+    let cfg = valid_config(data);
     if cfg.validate().is_err() {
         return;
     }
@@ -227,7 +239,10 @@ fuzz_target!(|data: &[u8]| {
     let profile = NoiseProfile::from_frames(&spec, &[0]);
     if let Ok(profiled) = NoiseProfile::estimate(&samples, &cfg) {
         assert_eq!(profiled.spectrum().len(), spec.bin_count(), "profile bins");
-        assert!(profiled.spectrum().iter().all(|v| v.is_finite()), "profile non-finite");
+        assert!(
+            profiled.spectrum().iter().all(|v| v.is_finite()),
+            "profile non-finite"
+        );
     }
     for gate in [
         GateConfig::default(),
@@ -303,22 +318,29 @@ fuzz_target!(|data: &[u8]| {
     for frame in spec.frames().iter().take(8) {
         let energies = bank.energies(frame);
         assert_eq!(energies.len(), n_mels, "mel energies");
-        assert!(energies.iter().all(|v| v.is_finite() && *v >= 0.0), "mel energy");
-        // The bank tiles the band, so its energies sum to the frame's power.
-        let total: f64 = energies.iter().sum();
-        let power: f64 = frame.iter().map(|c| c.power()).sum();
         assert!(
-            (total - power).abs() < 1e-6 * power.max(1.0),
-            "mel energy conservation: {total} vs {power}"
+            energies.iter().all(|v| v.is_finite() && *v >= 0.0),
+            "mel energy"
         );
+        // The bank tiles the band, so its energies sum to the frame's power.
+        // A single filter is the documented exception: one triangle cannot
+        // tile a band, so only part of the spectrum is weighted at all.
+        if n_mels >= 2 {
+            let total: f64 = energies.iter().sum();
+            let power: f64 = frame.iter().map(|c| c.power()).sum();
+            assert!(
+                (total - power).abs() < 1e-6 * power.max(1.0),
+                "mel energy conservation: {total} vs {power}"
+            );
+        }
         for coeffs in [mfcc(&energies, 13), mfcc(&energies, 1)] {
             assert!(coeffs.iter().all(|v| v.is_finite()), "mfcc non-finite");
         }
         assert!(bank.energies_db(frame, -200.0).iter().all(|v| v.is_finite()));
     }
 
-    // The cepstrum only accepts power-of-two lengths >= 2, and must be total
-    // for those. Pad/truncate to the next power of two.
+    // The cepstrum only accepts power-of-two lengths >= 2, and must be total for
+    // those. Pad/truncate to the next power of two.
     let n = samples.len().next_power_of_two().max(2);
     let padded: Vec<f64> = (0..n).map(|i| samples[i % samples.len()]).collect();
     match real_cepstrum(&padded) {

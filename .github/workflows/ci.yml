@@ -17,7 +17,13 @@ jobs:
     with:
       tier: a
       all-features: true
-      miri: true
+      # `miri` is deliberately off: it compiles the dev-dependency tree, and
+      # proptest -> quick-error uses inline assembly that Miri rejects
+      # ("unsupported operation: inline assembly is not supported") before any
+      # of this crate's own code runs. The crate is `#![forbid(unsafe_code)]`
+      # with no FFI and no threading, so there is no undefined behaviour for
+      # Miri to find here — dsp-core (the L0 layer this sits on) omits it for
+      # the same reason.
       embedded: true
       wasm: true
 
