@@ -5,6 +5,16 @@ Changelog](https://keepachangelog.com/) — versions follow [semver](https://sem
 
 ## [Unreleased]
 
+### Added
+
+- **`dct`** — the standalone orthonormal DCT-II (`dct2`), extracted from
+  the MFCC path where it always lived inline. Image placeholders,
+  perceptual hashes, and any spectral compaction need the same cosine
+  basis without a mel bank in front of it. Proven properties: a constant
+  input maps to DC only, a cosine row maps to a single coefficient, the
+  transform is an isometry, and a pHash-style median-threshold pipeline
+  is deterministic and separates distinct structure.
+
 ## [0.1.0] - 2026-10-06
 
 ### Added

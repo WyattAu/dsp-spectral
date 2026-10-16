@@ -118,6 +118,7 @@
 //! | [`config`] | [`StftConfig`] — window, hop, transform size, centring, overlap |
 //! | [`window`] | [`Window`] — Hann, Hamming, Blackman, Blackman–Harris, flat top, rectangular |
 //! | [`features`] | centroid, bandwidth, flatness, rolloff, flux, zero-crossing rate |
+//! | [`dct`] | standalone orthonormal DCT-II |
 //! | [`mel`] | [`MelBank`], mel scale, MFCC (DCT-II), real cepstrum |
 //! | [`restore`] | [`NoiseProfile`], [`spectral_gate`], [`spectral_subtract`], [`harmonic_percussive_split`], [`spectral_smooth`], [`denoise`] |
 //! | [`complex`] | [`Complex`] — the minimal complex value the spectral bins carry |
@@ -141,6 +142,7 @@ extern crate alloc;
 
 pub mod complex;
 pub mod config;
+pub mod dct;
 pub mod error;
 pub mod features;
 pub mod mel;
