@@ -1,4 +1,4 @@
-# Security Policy — dsp-spectral
+# Security Policy: dsp-spectral
 
 ## Supported versions
 
@@ -21,7 +21,7 @@ patch ships.
 `dsp-spectral` is a numeric DSP library. Security considerations for
 integrators:
 
-- **No network, filesystem, or process state** — the crate is pure
+- **No network, filesystem, or process state**: the crate is pure
   computation over caller-owned buffers and has no attack surface beyond
   its numeric inputs.
 - **`process` paths are panic-free by construction** (crate denies
@@ -32,7 +32,7 @@ integrators:
 - **NaN propagation**: `stft` and `NoiseProfile::estimate` *reject* non-finite
   input with `SpectralError::NonFinite` rather than propagating it. The
   per-frame feature reducers, by contrast, are total by design and will report
-  a finite `0.0` for a silent frame — a caller who feeds NaN into a
+  a finite `0.0` for a silent frame: a caller who feeds NaN into a
   hand-built `Spectrum` gets NaN out of the feature functions, which is IEEE
   behaviour and not masked.
 - **Unbounded input**: `stft`, `NoiseProfile::estimate`, and `spectral_gate`
@@ -40,7 +40,7 @@ integrators:
   bounding an untrusted buffer should bound its length before analysis; the
   fuzz target caps samples at 4096 and the transform at 2²⁰ for the same
   reason.
-- `#![forbid(unsafe_code)]` — no unsafe blocks exist in this crate.
+- `#![forbid(unsafe_code)]`: no unsafe blocks exist in this crate.
 
 [GitHub security advisories]:
     https://github.com/WyattAu/dsp-spectral/security/advisories/new

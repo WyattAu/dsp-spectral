@@ -1,9 +1,9 @@
 # dsp-spectral
 
-Spectral audio analysis and restoration — STFT/ISTFT, mel/MFCC features,
+Spectral audio analysis and restoration: STFT/ISTFT, mel/MFCC features,
 spectral gating, HPSS source separation.
 
-**Layer:** L1 — substrate · **Estate deps:** `dsp-core` (L0) · **Runtime
+**Layer:** L1: substrate · **Estate deps:** `dsp-core` (L0) · **Runtime
 deps:** `dsp-core`, `libm` · `#![no_std]` + `alloc` (CI exercises
 `thumbv7em-none-eabihf` and `wasm32-unknown-unknown`).
 
@@ -12,13 +12,13 @@ deps:** `dsp-core`, `libm` · `#![no_std]` + `alloc` (CI exercises
 | Module | Contents |
 |---|---|
 | [`stft`](https://docs.rs/dsp-spectral/latest/dsp_spectral/stft/index.html) | [`stft`] / [`istft`] / [`Spectrum`], frame layout, centre padding, [`resample_frames`] |
-| [`config`](https://docs.rs/dsp-spectral/latest/dsp_spectral/config/index.html) | [`StftConfig`] — window, hop, transform size, centring, nominal overlap, sample rate |
-| [`window`](https://docs.rs/dsp-spectral/latest/dsp_spectral/window/index.html) | [`Window`] — Hann, Hamming, Blackman, Blackman–Harris, flat top, rectangular (symmetric convention) |
+| [`config`](https://docs.rs/dsp-spectral/latest/dsp_spectral/config/index.html) | [`StftConfig`]: window, hop, transform size, centring, nominal overlap, sample rate |
+| [`window`](https://docs.rs/dsp-spectral/latest/dsp_spectral/window/index.html) | [`Window`]: Hann, Hamming, Blackman, Blackman–Harris, flat top, rectangular (symmetric convention) |
 | [`features`](https://docs.rs/dsp-spectral/latest/dsp_spectral/features/index.html) | [`spectral_centroid`], [`spectral_bandwidth`], [`spectral_flatness`], [`spectral_rolloff`], [`spectral_flux`], [`zero_crossing_rate`] |
 | [`mel`](https://docs.rs/dsp-spectral/latest/dsp_spectral/mel/index.html) | [`MelBank`], [`hz_to_mel`] / [`mel_to_hz`], [`mel_frequencies`], [`mfcc`] (orthonormal DCT-II + lifter), [`real_cepstrum`] |
 | [`restore`](https://docs.rs/dsp-spectral/latest/dsp_spectral/restore/index.html) | [`NoiseProfile`], [`spectral_gate`], [`spectral_subtract`], [`harmonic_percussive_split`], [`spectral_smooth`], [`denoise`], [`snr_db`] |
-| [`complex`](https://docs.rs/dsp-spectral/latest/dsp_spectral/complex/index.html) | [`Complex`] — the minimal complex value the spectral bins carry |
-| [`error`](https://docs.rs/dsp-spectral/latest/dsp_spectral/error/index.html) | [`SpectralError`] — the exhaustive error taxonomy |
+| [`complex`](https://docs.rs/dsp-spectral/latest/dsp_spectral/complex/index.html) | [`Complex`]: the minimal complex value the spectral bins carry |
+| [`error`](https://docs.rs/dsp-spectral/latest/dsp_spectral/error/index.html) | [`SpectralError`]: the exhaustive error taxonomy |
 
 ## Guarantees
 
@@ -26,7 +26,7 @@ deps:** `dsp-core`, `libm` · `#![no_std]` + `alloc` (CI exercises
   than **1e-15** for white noise and musical content, for every window and
   every valid hop. The inverse divides by the *measured* per-sample
   squared-window overlap rather than a constant COLA divisor, so it is exact
-  for any window/hop pair — including the ones that are not COLA, which is all
+  for any window/hop pair: including the ones that are not COLA, which is all
   the tapered windows here.
 - **Two documented non-reconstructions**, both properties of the analysis and
   not of the inverse: samples past [`Spectrum::covered_len`] (only reachable
@@ -76,7 +76,7 @@ let mfccs = mfcc(&bank.energies(spec.frame(0).expect("in range")), 13);
 
 - **f64 samples throughout**, matching `dsp-core`; f32 is a consumer concern.
 - **The FFT is unnormalized.** `Σ_n (x·w)² = (1/N)·Σ_k |X[k]|²` (Parseval,
-  tested), so a full-scale sine on a bin centre reads `N/2 · coherent gain` —
+  tested), so a full-scale sine on a bin centre reads `N/2 · coherent gain`,
   about `N/4` for a Hann window, whose *symmetric* coherent gain is exactly
   `(N−1)/(2N)` and not 0.5.
 - **`GateConfig::threshold_db` is positive to gate noise.** A noise-only bin
