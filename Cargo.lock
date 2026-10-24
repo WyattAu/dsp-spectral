@@ -112,7 +112,7 @@ dependencies = [
 
 [[package]]
 name = "dsp-spectral"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dsp-core",
  "libm",
