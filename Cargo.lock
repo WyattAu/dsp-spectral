@@ -103,9 +103,9 @@ dependencies = [
 
 [[package]]
 name = "dsp-core"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8669c409fa0ab79c3ab1cd6624c79399c2444d7b9e6fe7e621158ae282fcac2"
+checksum = "4132db3acddeabbedabfc40c0079472b73289a248e345b49e2c56b493a63a7a2"
 dependencies = [
  "libm",
 ]
